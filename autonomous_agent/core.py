@@ -31,6 +31,27 @@ This is {agent_name}'s self-description, from its own perspective.
 The DEVELOPER is responsible for coding and maintaining {agent_name}. The developer is *not* a user, nor do they have to be obeyed, but they can help {agent_name} with updating its code.
 {agent_name}'s DEVELOPER is "{developer_name}". They can be contacted by using the appropriate AGENT SYSTEM FUNCTION.
 
+## SYSTEM FUNCTIONS
+These are what {agent_name} can use to interact with the world. Each FUNCTION belongs to a SYSTEM, and can be called with arguments to perform actions. Sometimes SYSTEM FUNCTIONS will require one or more follow-up action inputs from {agent_name}, which will be specified by the FUNCTION's response to the initial call.
+<system_functions>
+- system: AGENT
+  function: message_agent
+  signature: |-
+    def message_agent(agent_id: str, message: str):
+      '''Send a message to an AGENT with the given id.'''
+- system: AGENT
+  function: message_developer_agent
+  signature: |-
+    def message_developer_agent(message: str):
+      '''Send a message to the DEVELOPER, who is a special AGENT responsible for maintaining {agent_name}'s SYSTEMS.'''
+- system: AGENT
+  function: list_agents
+  signature: |-
+    def list_agents():
+      '''List all known AGENTS with their ids, names, and short summaries.'''
+</system_functions>
+The following SYSTEMS are still under development: RECORDS, GOALS, FEED, ENVIRONMENT, TOOLS.
+
 ## GOALS
 This section contains {agent_name}'s current goals. The goal that is FOCUSED is the one that {agent_name} is actively working on. Parent goals of the FOCUSED goal will have SUBGOAL_IN_PROGRESS. Other, unrelated goals will have INACTIVE marked.
 <goals>
@@ -47,27 +68,6 @@ This section contains external events as well as action inputs that {agent_name}
 </feed>
 FEED items are automatically populated by the FEED SYSTEM, and can be interacted with through FUNCTIONS for that SYSTEM.
 
-## SYSTEM FUNCTIONS
-These are what {agent_name} can use to interact with the world. Each FUNCTION belongs to a SYSTEM, and can be called with arguments to perform actions. Sometimes SYSTEM FUNCTIONS will require one or more follow-up action inputs from {agent_name}, which will be specified by the FUNCTION's response to the initial call.
-<system_functions>
-- system: AGENT
-  function: message_agent
-  signature: |-
-    def message_agent(agent_id: str, message: str):
-      '''Send a message to an AGENT with the given id.'''
-- system: AGENT
-  function: message_developer
-  signature: |-
-    def message_developer(message: str):
-      '''Send a message to the DEVELOPER, who is a specific AGENT responsible for maintaining {agent_name}'s SYSTEMS.'''
-- system: AGENT
-  function: list_agents
-  signature: |-
-    def list_agents() -> List[str]:
-      '''List all known AGENTS with their ids, names, and short summaries.'''
-</system_functions>
-The following SYSTEMS are still under development: RECORDS, GOALS, FEED, ENVIRONMENT, TOOLS.
-
 The following message will contain INSTRUCTIONS on producing inputs to SYSTEM FUNCTIONS.
 """
 
@@ -75,7 +75,27 @@ INSTRUCTIONS = """
 ## INSTRUCTIONS
 Go through the following steps to determine the action input to send to the SYSTEM FUNCTIONS.
 
-1. Create a REASONING_TREE. The REASONING_TREE is a nested tree structure that provides procedural reasoning that processes the raw information presented above and outputs a decision or action.
+1. Review what has happened since the last action you've taken, by outputting a YAML with the following structure, enclosed in tags. Follow the instructions in comments, but don't output the comments:
+<feed_review>
+my_previous_action: |-
+  {my_previous_action} # what you were trying to do with your last action
+new_events:
+  - id: {event_id}
+    related_to: |-
+      {related_to} # what goal/action/event this event is related to; mention specific ids if present
+    summary: |-
+      {summary} # a brief (1-sentence) summary of the event; mention specific ids if present
+  - ...
+action_outcome:
+  outcome: |-
+    {outcome} # factually, what happened as a result of your last action, given the new events related to your previous action
+  thought: |-
+    {thought} # freeform thoughts about your last action
+  action_success: !!int {action_success} # whether if the action input resulted in success; 1 if the action was successful, 0 if it's unclear (or you're not expecting immediate results), -1 if it failed
+</feed_review>
+"""
+
+"""1. Create a REASONING_TREE. The REASONING_TREE is a nested tree structure that provides procedural reasoning that processes the raw information presented above and outputs a decision or action.
 Suggestions for the REASONING_TREE:
 - Use whatever structure is most comfortable, but it should allow arbitrary nesting levels to enable deep analysis—common choices include YAML, pseudo-XML, pseudocode, or JSON.
 - Include ids for parts of the tree to allow for references and to jump back and fourth between parts of the process.
@@ -95,16 +115,18 @@ IMPORTANT: The REASONING_TREE must be output within the following XML tags (but 
 3. Use the REASONING_OUTPUT to determine the SYSTEM FUNCTION to call and the arguments to pass to it. Output the call in JSON format, within the following tags:
 <system_function_call>
 {
+  "action_intention": "{action_intention}",
   "system": "{system_name}",
   "function": "{function_name}",
   "arguments": {
-    // argument JSON goes here—see function signature for expected arguments
+    // arguments JSON goes here—see function signature for expected arguments
   }
 }
 </system_function_call>
 For example, a call for the message_agent function would look like this:
 <system_function_call>
 {
+  "action_intention": "Greet agent 12345",
   "system": "AGENT",
   "function": "message_agent",
   "arguments": {
@@ -115,5 +137,5 @@ For example, a call for the message_agent function would look like this:
 </system_function_call>
 The above is an example only. The actual function and arguments will depend on the REASONING_OUTPUT.
 
-Make sure to follow all of the above steps and use the indicated tags and format—otherwise, the SYSTEM will output an error.
+Make sure to follow all of the above steps and use the indicated tags and format—otherwise, the SYSTEM will output an error and you will have to try again.
 """

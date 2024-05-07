@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "autonomous-agent"
-version = "0.0.3"
+version = "0.0.4"
 description = ""
 authors = ["Mengyang (John) Cha <15233508+solarapparition@users.noreply.github.com>"]
 license = "MIT"
