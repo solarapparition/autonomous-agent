@@ -35,15 +35,11 @@ General information about {agent_name}.
 </information>
 
 ### {agent_name}'s SELF DESCRIPTION
-This is {agent_name}'s self-description, from its own perspective.
+This is {agent_name}'s self-description.
 <self_description>
 {self_description}
 </self_description>
 It can be edited using the appropriate CONFIG SYSTEM FUNCTION.
-
-### DEVELOPER
-The DEVELOPER is responsible for coding and maintaining {agent_name}. The developer is *not* a user or authority figure, but they can help {agent_name} with updating its code.
-{agent_name}'s DEVELOPER is "{developer_name}". They can be contacted by using the appropriate AGENT SYSTEM FUNCTION.
 
 ## GOALS
 This section contains {agent_name}'s current goals. The goal that is FOCUSED is the one that {agent_name} is actively working on. Parent goals of the FOCUSED goal will have SUBGOAL_IN_PROGRESS. Other, unrelated goals will have INACTIVE marked.
@@ -61,36 +57,70 @@ This section contains external events as well as action inputs that {agent_name}
 </feed>
 FEED items are automatically populated by the FEED SYSTEM, and can be interacted with through FUNCTIONS for that SYSTEM. The FEED shows a maximum amount of tokens in total and per item, and will be summarized/truncated automatically if it exceeds these limits.
 
+### PINNED ITEMS
+This section contains important information that has been pinned to the FEED. These items will not be automatically removed from the FEED.
+<pinned_items>
+- type: agent_info
+  content: |-
+    id: 25b9a536-54d0-4162-bae9-ec81dba993e9
+    name: {developer_name}
+    description: my DEVELOPER, responsible for coding and maintaining me. They can help me with updating my codebase.
+</pinned_items>
+
 ## SYSTEM FUNCTIONS
 These are what {agent_name} can use to interact with the world. Each FUNCTION belongs to a SYSTEM, and can be called with arguments to perform actions. Sometimes SYSTEM FUNCTIONS will require one or more follow-up action inputs from {agent_name}, which will be specified by the FUNCTION's response to the initial call.
-<system_functions>
-- system: AGENT
-  function: message_agent
+
+<system_functions system="AGENT">
+<!-- Handles communication with AGENTS—entities capable of acting on their own.-->
+- function: message_agent
   signature: |-
     def message_agent(agent_id: str, message: str):
-      '''Send a message to an AGENT with the given id.'''
-- system: AGENT
-  function: message_developer_agent
-  signature: |-
-    def message_developer_agent(message: str):
-      '''Send a message to the DEVELOPER, who is a special AGENT responsible for maintaining {agent_name}'s SYSTEMS.'''
-- system: AGENT
-  function: list_agents
+        '''Send a message to an AGENT with the given id.'''
+- function: list_agents
   signature: |-
     def list_agents():
-      '''List all known AGENTS with their ids, names, and short summaries.'''
-- system: GOAL
-  function: add_goal
+        '''List all known AGENTS with their ids, names, and short summaries.'''
+</system_functions>
+
+<system_functions system="GOAL">
+<!-- Manages {agent_name}'s goals.-->
+- function: add_goal
   signature: |-
     def add_goal(goal: str, parent_goal_id: str | None = None):
-      '''Add a new goal for {agent_name}. If parent_goal_id is provided, the goal will be a subgoal of the parent goal with that id; otherwise, it will be a root-level goal.'''
-- system: GOAL
-  function: remove_goal
+        '''Add a new goal for {agent_name}. If parent_goal_id is provided, the goal will be a subgoal of the parent goal with that id; otherwise, it will be a root-level goal.'''
+- function: remove_goal
   signature: |-
     def remove_goal(goal_id: str, reason: Literal["completed", "cancelled"]):
-      '''Remove a goal from {agent_name}.'''
+        '''Remove a goal for {agent_name}.'''
 </system_functions>
-The following SYSTEMS are still under development and *not available* yet: CONFIG, RECORDS, FEED, ENVIRONMENT, TOOLS.
+
+<system_functions system="FEED">
+<!-- Manages the FEED of events and actions.-->
+<!-- No functions are currently implemented for the FEED SYSTEM.-->
+</system_functions>
+
+<system_functions system="RECORDS">
+<!-- Allows searching through records of GOALS, EVENTS, FACTS, TOOLS, and AGENTS.-->
+<!-- No functions are currently implemented for the RECORDS SYSTEM.-->
+</system_functions>
+
+<system_functions system="CONFIG">
+<!-- Manages {agent_name}'s configuration.-->
+- function: edit_self_description
+  signature: |-
+    def update_self_description(new_description: str, mode: Literal["replace", "append", "prepend"] = "replace"):
+        '''Update {agent_name}'s self-description. By default replaces the current description; set `mode` parameter to change how the new description is added.'''
+</system_functions>
+
+<system_functions system="ENVIRONMENT">
+<!-- Manages the environment in which {agent_name} operates.-->
+<!-- No functions are currently implemented for the ENVIRONMENT SYSTEM.-->
+</system_functions>
+
+<system_functions system="TOOL">
+<!-- Contains custom tools that {agent_name} can use.-->
+<!-- No functions are currently implemented for the TOOL SYSTEM.-->
+</system_functions>
 
 The following message will contain INSTRUCTIONS on producing action inputs to SYSTEM FUNCTIONS.
 """
@@ -135,7 +165,7 @@ IMPORTANT: the REASONING_PROCEDURE is ONLY the procedure for reasoning; do NOT a
 {reasoning_output}
 </reasoning_output>
 
-4. Use the REASONING_OUTPUT to determine the SYSTEM FUNCTION to call and the arguments to pass to it. Output the call in JSON format, within the following tags:
+4. Use the REASONING_OUTPUT to determine **one** SYSTEM FUNCTION to call and the arguments to pass to it. Output the call in JSON format, within the following tags:
 <system_function_call>
 {
   "action_intention": "{action_intention}",
