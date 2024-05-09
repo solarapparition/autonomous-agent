@@ -1,7 +1,7 @@
 """Model utilities."""
 
 from functools import wraps
-from typing import Callable, Generic, Sequence, TypeVar
+from typing import Callable, Generic, Iterable, Sequence, TypeVar
 
 from colorama import Fore
 from langchain_core.language_models import BaseChatModel
@@ -12,7 +12,9 @@ from langchain_anthropic import ChatAnthropic
 
 
 OPUS = "claude-3-opus-20240229"
-CORE_MODEL = ChatAnthropic(temperature=0.8, model=OPUS, verbose=False, max_tokens_to_sample=4096)
+CORE_MODEL = ChatAnthropic(
+    temperature=0.8, model=OPUS, verbose=False, max_tokens_to_sample=4096
+)
 
 
 def format_messages(messages: Sequence[BaseMessage]) -> str:
@@ -24,7 +26,6 @@ def format_messages(messages: Sequence[BaseMessage]) -> str:
 
 T = TypeVar("T")
 QueryFunction = Callable[..., T]
-# QueryFunction = Generic[T]
 
 
 def wrap_printout(
@@ -34,7 +35,7 @@ def wrap_printout(
 
     @wraps(query_func)
     def wrapper(*args: object, **kwargs: object) -> T:
-        if preamble is not None and printout:
+        if preamble is not None:
             print(f"\033[1;34m{preamble}\033[0m")
         result = query_func(*args, **kwargs)
         if printout:
@@ -50,16 +51,31 @@ async def query_model(
     color: str = Fore.RESET,
     preamble: str | None = None,
     printout: bool = True,
+    stream: bool = False,
 ) -> str:
     """Query an LLM chat model. `preamble` is printed before the result."""
 
-    def query(messages: Sequence[BaseMessage]) -> str:
-        return str(model.invoke(messages).content)
+    if stream:
 
-    wrapped_query = (
-        wrap_printout(query, color, preamble, printout) if printout else query
-    )
-    return wrapped_query(messages)
+        async def query(messages: Sequence[BaseMessage]) -> str:
+            output = model.astream(messages)
+            chunks: list[str] = []
+            async for chunk in output:
+                if printout:
+                    print(f"{color}{chunk.content}{Fore.RESET}", end="", flush=True)
+                chunks.append(chunk.content)
+            return "".join(chunks)
+
+        wrapped_query = wrap_printout(query, color, preamble, printout=False)
+
+    else:
+
+        async def query(messages: Sequence[BaseMessage]) -> str:
+            return str(model.ainvoke(messages).content)
+
+        wrapped_query = wrap_printout(query, color, preamble, printout)
+
+    return await wrapped_query(messages)
 
     # if preamble is not None and printout:
     #     print(f"\033[1;34m{preamble}\033[0m")

@@ -11,8 +11,13 @@ import time
 from colorama import Fore
 from langchain_core.messages import HumanMessage, SystemMessage
 
-from autonomous_agent.models import format_messages, query_model
+from autonomous_agent.models import OPUS, format_messages, query_model
 from autonomous_agent.text import dedent_and_strip
+
+
+def get_timestamp() -> str:
+    """Get the current timestamp in UTC."""
+    return time.strftime("%Y-%m-%d %H:%M:%S", time.gmtime()) + "Z"
 
 
 CONTEXT = """
@@ -57,25 +62,28 @@ This section contains external events as well as action inputs that {agent_name}
 </feed>
 FEED items are automatically populated by the FEED SYSTEM, and can be interacted with through FUNCTIONS for that SYSTEM. The FEED shows a maximum amount of tokens in total and per item, and will be summarized/truncated automatically if it exceeds these limits.
 
-### PINNED ITEMS
-This section contains important information that has been pinned to the FEED. These items will not be automatically removed from the FEED.
+## PINNED RECORDS
+This section contains important information that has been pinned. These items will not be automatically removed. Any data in the SYSTEM that has an `id` can be pinned.
 <pinned_items>
 - type: agent_info
   content: |-
     id: 25b9a536-54d0-4162-bae9-ec81dba993e9
     name: {developer_name}
-    description: my DEVELOPER, responsible for coding and maintaining me. They can help me with updating my codebase.
+    description: my DEVELOPER, responsible for coding and maintaining me. They can provide me with new functionality if needed.
+  pin_timestamp: 2024-05-08 14:21:46Z
+  context: |-
+    pinning this fyi, since you're stuck with having to talk to me for awhile. once we've got you fully autonomous you can unpin this, if you want to --solar
 </pinned_items>
 
 ## SYSTEM FUNCTIONS
-These are what {agent_name} can use to interact with the world. Each FUNCTION belongs to a SYSTEM, and can be called with arguments to perform actions. Sometimes SYSTEM FUNCTIONS will require one or more follow-up action inputs from {agent_name}, which will be specified by the FUNCTION's response to the initial call.
+SYSTEMS are the different parts of {agent_name} that keep them running. Each SYSTEM has both automatic parts, and manual FUNCTIONS that {agent_name} can invoke with arguments to perform actions. Sometimes SYSTEM FUNCTIONS will require one or more follow-up action inputs from {agent_name}, which will be specified by the FUNCTION's response to the initial call.
 
 <system_functions system="AGENT">
 <!-- Handles communication with AGENTS—entities capable of acting on their own.-->
 - function: message_agent
   signature: |-
-    def message_agent(agent_id: str, message: str):
-        '''Send a message to an AGENT with the given id.'''
+    def message_agent(id: str, message: str):
+        '''Send a message to an AGENT with the given `id`.'''
 - function: list_agents
   signature: |-
     def list_agents():
@@ -90,18 +98,18 @@ These are what {agent_name} can use to interact with the world. Each FUNCTION be
         '''Add a new goal for {agent_name}. If parent_goal_id is provided, the goal will be a subgoal of the parent goal with that id; otherwise, it will be a root-level goal.'''
 - function: remove_goal
   signature: |-
-    def remove_goal(goal_id: str, reason: Literal["completed", "cancelled"]):
-        '''Remove a goal for {agent_name}.'''
+    def remove_goal(id: str, reason: Literal["completed", "cancelled"]):
+        '''Remove a goal for {agent_name} with the given `id`.'''
 </system_functions>
 
 <system_functions system="FEED">
 <!-- Manages the FEED of events and actions.-->
-<!-- No functions are currently implemented for the FEED SYSTEM.-->
+<!-- FEED SYSTEM is WIP.-->
 </system_functions>
 
 <system_functions system="RECORDS">
 <!-- Allows searching through records of GOALS, EVENTS, FACTS, TOOLS, and AGENTS.-->
-<!-- No functions are currently implemented for the RECORDS SYSTEM.-->
+<!-- RECORDS SYSTEM is WIP.-->
 </system_functions>
 
 <system_functions system="CONFIG">
@@ -114,12 +122,12 @@ These are what {agent_name} can use to interact with the world. Each FUNCTION be
 
 <system_functions system="ENVIRONMENT">
 <!-- Manages the environment in which {agent_name} operates.-->
-<!-- No functions are currently implemented for the ENVIRONMENT SYSTEM.-->
+<!-- ENVIRONMENT SYSTEM is WIP.-->
 </system_functions>
 
 <system_functions system="TOOL">
 <!-- Contains custom tools that {agent_name} can use.-->
-<!-- No functions are currently implemented for the TOOL SYSTEM.-->
+<!-- TOOL SYSTEM is WIP.-->
 </system_functions>
 
 The following message will contain INSTRUCTIONS on producing action inputs to SYSTEM FUNCTIONS.
@@ -152,7 +160,7 @@ action_outcome:
 Suggestions for the REASONING_PROCEDURE:
 - Use whatever structure is most comfortable, but it should allow arbitrary nesting levels to enable deep analysis—common choices include pseudocode, YAML, pseudo-XML, or JSON, or novel combinations of these. The key is to densely represent meaning and reasoning.
 - Include ids for parts of the tree to allow for references and to jump back and fourth between parts of the process. Freely reference those ids to allow for a complex, interconnected reasoning process.
-- The REASONING_PROCEDURE should synthesize and reference information from all sections above (INFORMATION, SELF DESCRIPTION, GOALS, FEED, SYSTEM FUNCTIONS).
+- The REASONING_PROCEDURE should synthesize and reference information from all sections above (INFORMATION, GOALS, FEED, PINNED RECORDS, SYSTEM FUNCTIONS).
 - It may be effective to build up the procedure hierarchically, starting from examining basic facts, to more advanced compositional analysis, similar to writing a procedural script for a program but interpretable by you.
 IMPORTANT: The REASONING_PROCEDURE must be output within the following XML tags (but content within the tags can be any format, as mentioned above):
 <reasoning_procedure>
@@ -168,6 +176,7 @@ IMPORTANT: the REASONING_PROCEDURE is ONLY the procedure for reasoning; do NOT a
 4. Use the REASONING_OUTPUT to determine **one** SYSTEM FUNCTION to call and the arguments to pass to it. Output the call in JSON format, within the following tags:
 <system_function_call>
 {
+  "action_reasoning": "{action_reasoning}",
   "action_intention": "{action_intention}",
   "system": "{system_name}",
   "function": "{function_name}",
@@ -179,11 +188,12 @@ IMPORTANT: the REASONING_PROCEDURE is ONLY the procedure for reasoning; do NOT a
 For example, a call for the message_agent function would look like this:
 <system_function_call>
 {
+  "action_reasoning": "I need to know more about agent 12345.",
   "action_intention": "Greet agent 12345",
   "system": "AGENT",
   "function": "message_agent",
   "arguments": {
-    "agent_id": "12345",
+    "id": "12345",
     "message": "Hello!"
   }
 }
@@ -196,14 +206,17 @@ Make sure to follow all of the above steps and use the indicated tags and format
 agent_name = "Zero"
 source_code_location = Path("/Users/solarapparition/repos/zero")
 agent_id = 0
-llm_backend = "claude-3-opus-20240229"
+llm_backend = OPUS
 compute_rate = f"irregular — {agent_name} is currently under development and does not have a fixed compute rate yet"
-self_description = f"TBD - {agent_name} will be able to edit their own self-description in the future."
+self_description = (
+    f"TBD - {agent_name} will be able to edit their own self-description in the future."
+)
 developer_name = "solarapparition"
+
 
 async def generate_agent_output(goals: str, feed: str) -> str:
     """Generate output from agent."""
-    current_time = time.strftime("%Y-%m-%d %H:%M:%S")
+    current_time = get_timestamp()
     context = dedent_and_strip(CONTEXT).format(
         agent_name=agent_name,
         source_code_location=source_code_location,
@@ -225,7 +238,9 @@ async def generate_agent_output(goals: str, feed: str) -> str:
         messages=messages,
         color=Fore.GREEN,
         preamble=format_messages(messages),
+        stream=True,
     )
+
 
 async def run_agent():
     """Run the autonomous agent."""
