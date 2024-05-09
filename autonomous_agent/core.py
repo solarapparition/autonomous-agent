@@ -5,14 +5,19 @@ IMPORTANT NOTE: this contains the core functionality for the autonomous agent. I
 """
 
 import asyncio
+from dataclasses import dataclass
+from functools import cached_property
+import os
 from pathlib import Path
 import time
+from typing import Any
 
 from colorama import Fore
 from langchain_core.messages import HumanMessage, SystemMessage
 
 from autonomous_agent.models import OPUS, format_messages, query_model
 from autonomous_agent.text import dedent_and_strip
+from autonomous_agent.yaml_tools import load_yaml, save_yaml
 
 
 def get_timestamp() -> str:
@@ -35,8 +40,9 @@ General information about {agent_name}.
 - {agent_name}'s source code is located at `{source_code_location}`.
 - {agent_name}'s id: {agent_id}
 - LLM: the model used by {agent_name} is `{llm_backend}`
-- Compute rate (how frequently {agent_name} can act): {compute_rate}
-- Current time: {current_time}
+- Compute Rate (how frequently {agent_name} can act): {compute_rate}
+- Current Time: {current_time}
+- Completed Actions: {completed_actions}
 </information>
 
 ### {agent_name}'s SELF DESCRIPTION
@@ -69,7 +75,7 @@ This section contains important information that has been pinned. These items wi
   content: |-
     id: 25b9a536-54d0-4162-bae9-ec81dba993e9
     name: {developer_name}
-    description: my DEVELOPER, responsible for coding and maintaining me. They can provide me with new functionality if needed.
+    description: my DEVELOPER, responsible for coding and maintaining me. They can provide me with new functionality if requested, and more generally can help me with tasks that I can't do yet.
   pin_timestamp: 2024-05-08 14:21:46Z
   context: |-
     pinning this fyi, since you're stuck with having to talk to me for awhile. once we've got you fully autonomous you can unpin this, if you want to --solar
@@ -116,18 +122,18 @@ SYSTEMS are the different parts of {agent_name} that keep them running. Each SYS
 <!-- Manages {agent_name}'s configuration.-->
 - function: edit_self_description
   signature: |-
-    def update_self_description(new_description: str, mode: Literal["replace", "append", "prepend"] = "replace"):
+    def update_self_description(mode: Literal["replace", "append", "prepend"], new_description: str):
         '''Update {agent_name}'s self-description. By default replaces the current description; set `mode` parameter to change how the new description is added.'''
-</system_functions>
-
-<system_functions system="ENVIRONMENT">
-<!-- Manages the environment in which {agent_name} operates.-->
-<!-- ENVIRONMENT SYSTEM is WIP.-->
 </system_functions>
 
 <system_functions system="TOOL">
 <!-- Contains custom tools that {agent_name} can use.-->
 <!-- TOOL SYSTEM is WIP.-->
+</system_functions>
+
+<system_functions system="ENVIRONMENT">
+<!-- Manages the environment in which {agent_name} operates, including SYSTEMS themselves.-->
+<!-- ENVIRONMENT SYSTEM is WIP.-->
 </system_functions>
 
 The following message will contain INSTRUCTIONS on producing action inputs to SYSTEM FUNCTIONS.
@@ -173,30 +179,31 @@ IMPORTANT: the REASONING_PROCEDURE is ONLY the procedure for reasoning; do NOT a
 {reasoning_output}
 </reasoning_output>
 
-4. Use the REASONING_OUTPUT to determine **one** SYSTEM FUNCTION to call and the arguments to pass to it. Output the call in JSON format, within the following tags:
+4. Use the REASONING_OUTPUT to determine **one** SYSTEM FUNCTION to call and the arguments to pass to it. Output the call in YAML format, within the following tags:
 <system_function_call>
-{
-  "action_reasoning": "{action_reasoning}",
-  "action_intention": "{action_intention}",
-  "system": "{system_name}",
-  "function": "{function_name}",
-  "arguments": {
-    // arguments JSON goes here—see function signature for expected arguments
-  }
-}
+action_reasoning: |-
+  {action_reasoning}
+action_intention: |-
+  {action_intention}
+system: {system_name}
+function: {function_name}
+arguments:
+  # arguments YAML goes here—see function signature for expected arguments
+  # IMPORTANT: use |- for strings that could contain newlines—for example, in the above, the `action_reasoning` and `action_intention` fields could contain newlines, but `system` and `function` wouldn't. Individual `arguments` fields work the same way.
 </system_function_call>
+
 For example, a call for the message_agent function would look like this:
 <system_function_call>
-{
-  "action_reasoning": "I need to know more about agent 12345.",
-  "action_intention": "Greet agent 12345",
-  "system": "AGENT",
-  "function": "message_agent",
-  "arguments": {
-    "id": "12345",
-    "message": "Hello!"
-  }
-}
+action_reasoning: |-
+  I need to know more about agent 12345.
+action_intention: |-
+  Greet agent 12345
+system: AGENT
+function: message_agent
+arguments:
+  id: 12345
+  message: |-
+    Hello!
 </system_function_call>
 The above is an example only. The actual function and arguments will depend on the REASONING_OUTPUT.
 
@@ -214,7 +221,7 @@ self_description = (
 developer_name = "solarapparition"
 
 
-async def generate_agent_output(goals: str, feed: str) -> str:
+async def generate_agent_output(goals: str, feed: str, completed_actions: int) -> str:
     """Generate output from agent."""
     current_time = get_timestamp()
     context = dedent_and_strip(CONTEXT).format(
@@ -224,6 +231,7 @@ async def generate_agent_output(goals: str, feed: str) -> str:
         llm_backend=llm_backend,
         compute_rate=compute_rate,
         current_time=current_time,
+        completed_actions=completed_actions,
         self_description=self_description,
         developer_name=developer_name,
         goals=goals,
@@ -242,11 +250,64 @@ async def generate_agent_output(goals: str, feed: str) -> str:
     )
 
 
-async def run_agent():
+@dataclass
+class RunState:
+    """State for the autonomous agent."""
+
+    cache_location: Path
+
+    def load(self) -> dict[str, Any]:
+        """Load the cache from disk."""
+        return (
+            dict(load_yaml(self.cache_location)) if self.cache_location.exists() else {}
+        )
+
+    def save(self) -> None:
+        """Save the cache to disk."""
+        os.makedirs(self.cache_location.parent, exist_ok=True)
+        # self.cache_location.write_text(json.dumps(data, indent=2), encoding="utf-8")
+        save_yaml(self.cache, self.cache_location)
+
+    def set_and_save(self, key: str, value: Any) -> None:
+        """Set a key in the cache and save it to disk."""
+        if value == self.cache.get(key):
+            return
+        self.cache[key] = value
+        self.save()
+
+    def clear(self) -> None:
+        """Clear the cache."""
+        self.cache_location.unlink()
+        del self.cache
+
+    @cached_property
+    def cache(self) -> dict[str, Any]:
+        """Load the cache from disk."""
+        return self.load()
+
+    @property
+    def output(self) -> str | None:
+        """Get the output from the cache."""
+        return self.cache.get("output")
+
+    @output.setter
+    def output(self, value: str) -> None:
+        """Set the output in the cache."""
+        self.set_and_save("output", value)
+
+
+cache_location = Path("/Users/solarapparition/repos/zero/data/run_state.yaml")
+
+
+async def run_agent() -> None:
     """Run the autonomous agent."""
     goals = "None"
     feed = "None"
-    output = await generate_agent_output(goals, feed)
+    completed_actions = 0
+    state = RunState(cache_location=cache_location)
+    state.output = state.output or await generate_agent_output(
+        goals, feed, completed_actions
+    )
     breakpoint()
     # > if there is an error extraction, put it to not implemented for now
 
