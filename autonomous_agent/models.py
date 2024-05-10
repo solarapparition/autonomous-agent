@@ -1,20 +1,15 @@
 """Model utilities."""
 
 from functools import wraps
-from typing import Callable, Generic, Iterable, Sequence, TypeVar
+from typing import Callable, Sequence, TypeVar
 
 from colorama import Fore
 from langchain_core.language_models import BaseChatModel
 from langchain_core.messages import BaseMessage  # , AIMessage, ToolCall
-from langchain_anthropic import ChatAnthropic
+
+from autonomous_agent.config import CORE_MODEL
 
 # from langchain_core.tools import tool
-
-
-OPUS = "claude-3-opus-20240229"
-CORE_MODEL = ChatAnthropic(
-    temperature=0.8, model=OPUS, verbose=False, max_tokens_to_sample=4096
-)
 
 
 def format_messages(messages: Sequence[BaseMessage]) -> str:

@@ -15,7 +15,8 @@ from typing import Any
 from colorama import Fore
 from langchain_core.messages import HumanMessage, SystemMessage
 
-from autonomous_agent.models import OPUS, format_messages, query_model
+from autonomous_agent import config
+from autonomous_agent.models import format_messages, query_model
 from autonomous_agent.text import dedent_and_strip
 from autonomous_agent.yaml_tools import load_yaml, save_yaml
 
@@ -210,30 +211,20 @@ The above is an example only. The actual function and arguments will depend on t
 Make sure to follow all of the above steps and use the indicated tags and format—otherwise, the SYSTEM will output an error and you will have to try again.
 """
 
-agent_name = "Zero"
-source_code_location = Path("/Users/solarapparition/repos/zero")
-agent_id = 0
-llm_backend = OPUS
-compute_rate = f"irregular — {agent_name} is currently under development and does not have a fixed compute rate yet"
-self_description = (
-    f"TBD - {agent_name} will be able to edit their own self-description in the future."
-)
-developer_name = "solarapparition"
-
 
 async def generate_agent_output(goals: str, feed: str, completed_actions: int) -> str:
     """Generate output from agent."""
     current_time = get_timestamp()
     context = dedent_and_strip(CONTEXT).format(
-        agent_name=agent_name,
-        source_code_location=source_code_location,
-        agent_id=agent_id,
-        llm_backend=llm_backend,
-        compute_rate=compute_rate,
+        agent_name=config.NAME,
+        source_code_location=config.SOURCE_DIRECTORY,
+        agent_id=config.ID,
+        llm_backend=config.LLM_BACKEND,
+        compute_rate=config.COMPUTE_RATE,
         current_time=current_time,
         completed_actions=completed_actions,
-        self_description=self_description,
-        developer_name=developer_name,
+        self_description=config.SELF_DESCRIPTION,
+        developer_name=config.DEVELOPER,
         goals=goals,
         feed=feed,
     )
