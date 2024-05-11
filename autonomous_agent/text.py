@@ -14,7 +14,7 @@ def dedent_and_strip(text: str) -> str:
 class ExtractionError(Exception):
     """Raised when an extraction fails."""
 
-    problem: str
+    num_blocks_found: int
     text: str | None = None
     start_block_type: str | None = None
     end_block_type: str | None = None
@@ -26,7 +26,7 @@ class ExtractionError(Exception):
         Failed to extract a block:
         - Start block type: {start_block_type}
         - End block type: {end_block_type}
-        - Problem: {problem}
+        - Number of blocks found: {num_blocks_found}
         - Text:
         {text}
         """
@@ -34,7 +34,7 @@ class ExtractionError(Exception):
         output = template.format(
             start_block_type=self.start_block_type or "N/A",
             end_block_type=self.end_block_type or "N/A",
-            problem=self.problem or "N/A",
+            num_blocks_found=self.num_blocks_found,
             text=text,
         )
         return dedent_and_strip(output)
@@ -52,7 +52,7 @@ def extract_block(text: str, block_type: str) -> str | None:
 
 
 def extract_blocks(
-    text: str, start_block_type: str, end_block_type: str = "", prefix: str = "```"
+    text: str, start_block_type: str, end_block_type: str = "", prefix: str = ""
 ) -> list[str] | None:
     """Extracts specially formatted blocks of text from the LLM's output. `block_type` corresponds to a label for a markdown code block such as `yaml` or `python`."""
     pattern = r"{prefix}{start_block_type}\n(.*?){prefix}{end_block_type}".format(  # pylint:disable=consider-using-f-string
@@ -71,18 +71,26 @@ def unpack_block(
     end_block_type: str,
 ) -> str:
     """Validate and unpack the extracted block."""
-    assert extracted_result and len(extracted_result) == 1, ExtractionError(
-        text=text,
-        start_block_type=start_block_type,
-        end_block_type=end_block_type,
-        problem="Expected exactly one block.",
-    )
+    if not extracted_result:
+        raise ExtractionError(
+            text=text,
+            start_block_type=start_block_type,
+            end_block_type=end_block_type,
+            num_blocks_found=0,
+        )
+    if len(extracted_result) != 1:
+        raise ExtractionError(
+            text=text,
+            start_block_type=start_block_type,
+            end_block_type=end_block_type,
+            num_blocks_found=len(extracted_result),
+        )
     (block,) = extracted_result
     return block
 
 
 def extract_and_unpack(
-    text: str, start_block_type: str, end_block_type: str = "", prefix: str = "```"
+    text: str, start_block_type: str, end_block_type: str = "", prefix: str = ""
 ) -> str:
     """Extract and unpack a block."""
     extracted_result = extract_blocks(
