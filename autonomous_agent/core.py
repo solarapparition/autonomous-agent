@@ -2,6 +2,10 @@
 Core functionality for the autonomous agent.
 
 IMPORTANT NOTE: this contains the core functionality for the autonomous agent. Incorrectly modifying these can cause the agent to crash. Please proceed with caution.
+
+Reminders:
+- The end user is NOT other people but the agent itself.
+- Keep the code here as direct as possible—this will be read by the agent and we don't to avoid going through layers of abstraction to understand what's happening.
 """
 
 import asyncio
@@ -9,8 +13,10 @@ from dataclasses import dataclass
 from functools import cached_property
 import os
 from pathlib import Path
-import time
-from typing import Any
+import platform
+from textwrap import indent
+from typing import Any, Callable, Mapping, MutableMapping, Self
+from uuid import UUID, uuid4 as new_uuid
 
 from colorama import Fore
 from langchain_core.messages import HumanMessage, SystemMessage
@@ -19,18 +25,30 @@ import toml
 from autonomous_agent import config
 from autonomous_agent.models import format_messages, query_model
 from autonomous_agent.text import ExtractionError, dedent_and_strip, extract_and_unpack
-from autonomous_agent.yaml_tools import load_yaml, save_yaml
-
-
-def get_timestamp() -> str:
-    """Get the current timestamp in UTC."""
-    return time.strftime("%Y-%m-%d %H:%M:%S", time.gmtime()) + "Z"
+from autonomous_agent.helpers import (
+    as_yaml_str,
+    get_timestamp,
+    save_yaml,
+    load_yaml,
+    from_yaml_str,
+)
+from autonomous_agent.system_functions import config as config_system
 
 
 def get_python_version() -> str:
     """Get the Python version from the pyproject.toml file."""
     data = toml.load("pyproject.toml")
     return data["tool"]["poetry"]["dependencies"]["python"]
+
+
+def get_system_info() -> dict[str, str]:
+    """Get system information."""
+    return {
+        "system": platform.system(),
+        "release": platform.release(),
+        "machine": platform.machine(),
+        "processor": platform.processor(),
+    }
 
 
 CONTEXT = """
@@ -66,7 +84,7 @@ This section contains {agent_name}'s current goals. The goal that is FOCUSED is 
 These goals are autonomously determined by {agent_name}, and can be interacted with through the GOALS_SYSTEM_FUNCTION.
 
 ## FEED
-This section contains external events as well as action inputs that {agent_name} has sent to the SYSTEM_FUNCTIONS. There are 2 main FEED item types in the feed:
+This section contains external events as well as calls that {agent_name} has sent to the SYSTEM_FUNCTIONS. There are 2 main FEED item types in the feed:
 - Events/actions for the goal that is currently FOCUSED.
 - Recent events/actions for any goal, even ones not FOCUSED.
 <feed>
@@ -88,7 +106,7 @@ This section contains important information that has been pinned. These items wi
 </pinned-items>
 
 ## SYSTEM_FUNCTIONS
-SYSTEMS are the different parts of {agent_name} that keep them running. Each SYSTEM has both automatic parts, and manual FUNCTIONS that {agent_name} can invoke with arguments to perform actions. Sometimes SYSTEM_FUNCTIONS will require one or more follow-up action inputs from {agent_name}, which will be specified by the FUNCTION's response to the initial call.
+SYSTEMS are the different parts of {agent_name} that keep them running. Each SYSTEM has both automatic parts, and manual FUNCTIONS that {agent_name} can invoke with arguments to perform actions. Sometimes SYSTEM_FUNCTIONS will require one or more follow-up SYSTEM_FUNCTION calls from {agent_name}, which will be specified by the FUNCTION's response to the initial call.
 
 ### AGENTS_SYSTEM
 Handles communication with AGENTS—entities capable of acting on their own.
@@ -133,10 +151,9 @@ Manages {agent_name}'s configuration.
 - Model: `{llm_backend}`
 - Config File Location: `{config_file_location}`.
 <system-functions system="CONFIG">
-- function: edit_self_description
+- function: {update_self_description_name}
   signature: |-
-    def update_self_description(mode: Literal["replace", "append", "prepend"], new_description: str):
-        '''Update {agent_name}'s self-description. By default replaces the current description; set `mode` parameter to change how the new description is added.'''
+  {update_self_discription_signature}
 </system-functions>
 
 ### TOOL_SYSTEM
@@ -154,12 +171,12 @@ Manages the environment in which {agent_name} operates, including the SYSTEMS th
 <!-- SYSTEM is WIP.-->
 </system-functions>
 
-The following message will contain INSTRUCTIONS on producing action inputs to SYSTEM_FUNCTIONS.
+The following message will contain INSTRUCTIONS on producing action inputs to call SYSTEM_FUNCTIONS.
 """
 
 INSTRUCTIONS = """
 ## INSTRUCTIONS
-Remember that you are in the role of {agent_name}. Go through the following steps to determine the action input to send to the SYSTEM_FUNCTIONS.
+Remember that you are in the role of {agent_name}. Go through the following steps to determine the action input to call SYSTEM_FUNCTIONS.
 
 1. Review the FEED for what has happened since the last action you've taken, by outputting a YAML with the following structure, enclosed in tags. Follow the instructions in comments, but don't output the comments:
 <feed-review>
@@ -233,11 +250,15 @@ async def generate_agent_output(goals: str, feed: str, completed_actions: int) -
     """Generate output from agent."""
     current_time = get_timestamp()
     python_version = get_python_version()
+    raise NotImplementedError("TODO: Implement system info.")  # get_system_info()
+    raise NotImplementedError(
+        "TODO: Implement replacement of update_self_description_name and update_self_discription_signature."
+    )
     context = dedent_and_strip(CONTEXT).format(
         agent_name=config.NAME,
         source_code_location=config.SOURCE_DIRECTORY.absolute(),
-        python_version = python_version,
-        build_config_file = config.BUILD_CONFIG_FILE,
+        python_version=python_version,
+        build_config_file=config.BUILD_CONFIG_FILE,
         config_file_location=config.CONFIG_FILE,
         agent_id=config.ID,
         llm_backend=config.LLM_BACKEND,
@@ -254,6 +275,7 @@ async def generate_agent_output(goals: str, feed: str, completed_actions: int) -
         SystemMessage(content=context),
         HumanMessage(content=instructions),
     ]
+    breakpoint()
     return await query_model(
         messages=messages,
         color=Fore.GREEN,
@@ -268,41 +290,72 @@ class RunState:
 
     state_file: Path
 
-    def load(self) -> dict[str, Any]:
+    def load(self) -> MutableMapping[str, Any]:
         """Load the state from disk."""
-        return dict(load_yaml(self.state_file)) if self.state_file.exists() else {}
+        # return dict(load_yaml(self.state_file)) if self.state_file.exists() else {}
+        return load_yaml(self.state_file) if self.state_file.exists() else {}  # type: ignore
 
     def save(self) -> None:
         """Save the state to disk."""
         os.makedirs(self.state_file.parent, exist_ok=True)
-        save_yaml(self.disk_state, self.state_file)
+        save_yaml(self.state, self.state_file)
 
     def set_and_save(self, key: str, value: Any) -> None:
-        """Set a key in the state and save it to disk."""
-        if value == self.disk_state.get(key):
+        """Set a key in the state and save it."""
+        if value == self.state.get(key):
             return
-        self.disk_state[key] = value
+        self.state[key] = value
         self.save()
 
     def clear(self) -> None:
         """Clear the state file."""
         self.state_file.unlink()
-        del self.disk_state
+        del self.state
 
     @cached_property
-    def disk_state(self) -> dict[str, Any]:
+    def state(self) -> MutableMapping[str, Any]:
         """Load the state from disk."""
         return self.load()
 
     @property
     def output(self) -> str | None:
-        """Get the output from disk."""
-        return self.disk_state.get("output")
+        """Get the output from current state."""
+        return self.state.get("output")
 
     @output.setter
     def output(self, value: str) -> None:
-        """Set the output to disk."""
+        """Set the output to current state."""
         self.set_and_save("output", value)
+
+    @property
+    def action_event(self) -> MutableMapping[str, Any] | None:
+        """Get the action event from state."""
+        return self.state.get("action_event")
+
+    @action_event.setter
+    def action_event(self, value: MutableMapping[str, Any]) -> None:
+        """Set the action event to state."""
+        self.set_and_save("action_event", value)
+
+    @property
+    def call_result(self) -> str | None:
+        """Get the call result from state."""
+        return self.state.get("call_result")
+
+    @call_result.setter
+    def call_result(self, value: str) -> None:
+        """Set the call result to state."""
+        self.set_and_save("call_result", value)
+
+    @property
+    def call_result_event(self) -> MutableMapping[str, Any] | None:
+        """Get the call result event from state."""
+        return self.state.get("call_result_event")
+
+    @call_result_event.setter
+    def call_result_event(self, value: MutableMapping[str, Any]) -> None:
+        """Set the call result event to state."""
+        self.set_and_save("call_result_event", value)
 
 
 def extract_output_sections(output: str) -> tuple[str, str]:
@@ -318,25 +371,194 @@ def extract_output_sections(output: str) -> tuple[str, str]:
     return feed_review, system_function_call
 
 
+def extract_output(
+    output: str, completed_actions: int, new_events: int
+) -> tuple[MutableMapping[str, Any], MutableMapping[str, Any]]:
+    """Extract the output sections."""
+    try:
+        feed_review, system_function_call = extract_output_sections(output)  # type: ignore
+    except ExtractionError as e:
+        raise NotImplementedError("TODO: Implement error output flow.") from e
+    feed_review = from_yaml_str(feed_review)  # type: ignore
+    system_function_call = from_yaml_str(system_function_call)  # type: ignore
+    # if completed_actions:
+    #     raise NotImplementedError(
+    #         "TODO: Check if there is a summary for last action."
+    #     )
+    if new_events:
+        raise NotImplementedError("TODO: check there are summaries for new events.")
+    return feed_review, system_function_call  # type: ignore
+
+
+@dataclass
+class FunctionCallEvent:
+    """An action event."""
+
+    id: UUID
+    goal_id: UUID | None
+    "Id of the goal this action is related to."
+    timestamp: str
+    content: Mapping[str, Any]
+
+    @classmethod
+    def from_mapping(cls, mapping: Mapping[str, Any]) -> Self:
+        """Create an action event from a mapping."""
+        return cls(
+            id=UUID(mapping["id"]),
+            goal_id=UUID(mapping["goal_id"]) if mapping["goal_id"] else None,
+            timestamp=mapping["timestamp"],
+            content=mapping["content"],
+        )
+
+    @property
+    def summary(self) -> str:
+        """Get a summary of the action event."""
+        return self.content["action_intention"]
+
+    def __str__(self) -> str:
+        """Get the string representation of the action event."""
+        template = """
+        id: {id}
+        type: function_call
+        goal_id: {goal_id}
+        summary: {summary}
+        content:
+        {content}
+        """
+        content = indent(as_yaml_str(self.content), "  ")
+        return dedent_and_strip(template).format(
+            id=self.id, goal_id=self.goal_id, summary=self.summary, content=content
+        )
+
+
+@dataclass
+class Goal:
+    """A goal for the agent."""
+
+    id: UUID
+
+
+async def call_system_function(system_function_call: Mapping[str, Any]) -> str:
+    """Call a system function."""
+    system_mapping = {"CONFIG": config_system}
+    system = system_mapping.get(system_function_call["system"])
+    if not system:
+        raise NotImplementedError(
+            f"TODO: Implement {system_function_call['system']} system."
+        )
+    call: Callable[..., Any] = getattr(system, system_function_call["function"])
+    try:
+        call_result = call(**system_function_call["arguments"])
+        # we always await immediately because the async signature is only there for the agent's information—under the hood it still needs to return a message back to the agent
+        if asyncio.iscoroutinefunction(call):
+            call_result = await call_result
+    except Exception as e:
+        raise NotImplementedError(
+            "TODO: Implement error handling for function calls."
+        ) from e
+    return call_result
+
+
+@dataclass
+class CallResultEvent:
+    """Event for result of calls."""
+
+    id: UUID
+    timestamp: str
+    goal_id: UUID | None
+    "Id of the goal this call result is related to."
+    function_call_id: UUID
+    "Id of the function call this result is for."
+    content: str
+
+    @classmethod
+    def from_mapping(cls, mapping: Mapping[str, Any]) -> Self:
+        """Create an action event from a mapping."""
+        return cls(
+            id=UUID(mapping["id"]),
+            goal_id=UUID(mapping["goal_id"]) if mapping["goal_id"] else None,
+            timestamp=mapping["timestamp"],
+            function_call_id=UUID(mapping["function_call_id"]),
+            content=mapping["content"],
+        )
+
+    @property
+    def summary(self) -> str:
+        """Get a summary of the action event."""
+        return self.content
+
+    def __str__(self) -> str:
+        """Get the string representation of the action event."""
+        template = """
+        id: {id}
+        type: call_result
+        goal_id: {goal_id}
+        function_call_id: {function_call_id}
+        summary: {summary}
+        content: |-
+        {content}
+        """
+        content = indent(self.content, "  ")
+        return dedent_and_strip(template).format(
+            id=self.id,
+            goal_id=self.goal_id,
+            function_call_id=self.function_call_id,
+            summary=self.summary,
+            content=content,
+        )
+
+
 async def run_agent() -> None:
     """Run the autonomous agent."""
     goals = "None"
     feed = "None"
     completed_actions = 0
-    state = RunState(state_file=config.STATE_FILE)
-    state.output = state.output or await generate_agent_output(
+    new_events = 0
+    run_state = RunState(state_file=config.STATE_FILE)
+    run_state.output = run_state.output or await generate_agent_output(
         goals, feed, completed_actions
     )
+    active_goal: Goal | None = None
     try:
-        feed_review, system_function_call = extract_output_sections(str(state.output))
-    except ExtractionError as e:
-        raise NotImplementedError from e
+        feed_review, system_function_call = extract_output(
+            run_state.output, completed_actions, new_events  # type: ignore
+        )
+    except Exception as e:
+        raise NotImplementedError("TODO: Implement extraction error handling.") from e
 
-    # > commit
-    # parse feed review > summary and success
+    # at this point we can assume that feed_review and system_function_call have all required values; all issues with the structure output *must* have already been handled by extract_output (with an event attached)
+    if completed_actions:
+        raise NotImplementedError("TODO: Check for new events after previous action")
+    if new_events:
+        raise NotImplementedError("TODO: Add summaries to new events")
+    run_state.action_event = run_state.action_event or {
+        "id": str(new_uuid()),
+        "timestamp": get_timestamp(),
+        "goal_id": str(active_goal.id) if active_goal else None,
+        "content": system_function_call,
+    }
+    function_call_event = FunctionCallEvent.from_mapping(run_state.action_event)  # type: ignore
+    run_state.call_result = run_state.call_result or await call_system_function(
+        system_function_call
+    )
+    run_state.call_result_event = run_state.call_result_event or {
+        "id": str(new_uuid()),
+        "timestamp": get_timestamp(),
+        "goal_id": str(active_goal.id) if active_goal else None,
+        "function_call_id": str(function_call_event.id),
+        "content": run_state.call_result,
+    }
+    call_result_event = CallResultEvent.from_mapping(run_state.call_result_event)  # type: ignore
+
+    # commit
     breakpoint()
-    # > parse system function call > extract event > extract call args
-    # > need to save state at the end of round
+    # > save new events > timestamp format so that can be read back in # helpers.timestamp_to_filename and helpers.filename_to_timestamp
+    # > save goals > placeholder
+    # wrap up anything else
+    breakpoint()
+    # must save state at the end of round for history purposes
+    # > use async function sigs to indicate to agent that it won't return immediately
+    # > any unrecoverable issues requiring developer intervention needs to be saved as event as well
 
 
 asyncio.run(run_agent())

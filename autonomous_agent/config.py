@@ -3,7 +3,7 @@
 from pathlib import Path
 
 from langchain_anthropic import ChatAnthropic
-from autonomous_agent.yaml_tools import load_yaml
+from autonomous_agent.helpers import load_yaml
 
 CONFIG_FILE = Path("data/config.yaml")
 CONFIG_DATA = load_yaml(CONFIG_FILE)
