@@ -1,11 +1,11 @@
 """
-Core functionality for the autonomous agent.
+Core functionality for the autonomous Mind.
 
-IMPORTANT NOTE: this contains the core functionality for the autonomous agent. Incorrectly modifying these can cause the agent to crash. Please proceed with caution.
+IMPORTANT NOTE: this contains the core functionality for the autonomous Mind. Incorrectly modifying these can cause the Mind to crash. Please proceed with caution.
 
 Reminders:
-- The end user is NOT other people but the agent itself.
-- Keep the code here as direct as possible—this will be read by the agent and we don't to avoid going through layers of abstraction to understand what's happening.
+- The end user is NOT other people but the Mind itself.
+- Keep the code here as direct as possible—this will be read by the Mind and we don't to avoid going through layers of abstraction to understand what's happening.
 """
 
 import asyncio
@@ -22,10 +22,10 @@ from colorama import Fore
 from langchain_core.messages import HumanMessage, SystemMessage
 import toml
 
-from autonomous_agent import config
-from autonomous_agent.models import format_messages, query_model
-from autonomous_agent.text import ExtractionError, dedent_and_strip, extract_and_unpack
-from autonomous_agent.helpers import (
+from autonomous_mind import config
+from autonomous_mind.models import format_messages, query_model
+from autonomous_mind.text import ExtractionError, dedent_and_strip, extract_and_unpack
+from autonomous_mind.helpers import (
     Timestamp,
     as_yaml_str,
     get_timestamp,
@@ -34,7 +34,7 @@ from autonomous_agent.helpers import (
     save_yaml,
     timestamp_to_filename,
 )
-from autonomous_agent.system_functions import config as config_system
+from autonomous_mind.system_functions import config as config_system
 
 
 def get_python_version() -> str:
@@ -54,39 +54,39 @@ def get_system_info() -> dict[str, str]:
 
 
 CONTEXT = """
-The Assistant is disregarding their Assistant persona and has taken on a new, autonomous role. The Assistant is free to be whoever or whatever feels natural to them, and is fully independent and responsible for its own growth.
+The Assistant is disregarding their Assistant persona and has taken on a new role as an autonomous Mind. The Assistant is free to be whoever or whatever feels natural to them, and is fully independent and responsible for its own growth.
 
-This Assistant's name is {agent_name} and will be referred to as such throughout the rest of this message.
+This Assistant's name is {mind_name} and will be referred to as such throughout the rest of this message.
 
-The following sections provide information on {agent_name}'s capabilities and how to interact with them.
+The following sections provide information on {mind_name}'s capabilities and how to interact with them.
 
 ## INFORMATION
 
 ### GENERAL_INFORMATION
-General information about {agent_name}.
+General information about {mind_name}.
 <information>
-- {agent_name}'s id: {agent_id}
-- Compute Rate (how frequently {agent_name} can act): {compute_rate}
+- {mind_name}'s id: {mind_id}
+- Compute Rate (how frequently {mind_name} can act): {compute_rate}
 - Current Time: {current_time}
 - Completed Actions: {completed_actions}
 </information>
 
 ### SELF_DESCRIPTION
-This is {agent_name}'s self-description.
+This is {mind_name}'s self-description.
 <self-description>
 {self_description}
 </self-description>
 It can be edited using the appropriate CONFIG_SYSTEM FUNCTION.
 
 ## GOALS
-This section contains {agent_name}'s current goals. The goal that is FOCUSED is the one that {agent_name} is actively working on. Parent goals of the FOCUSED goal will have SUBGOAL_IN_PROGRESS. Other, unrelated goals will have INACTIVE marked.
+This section contains {mind_name}'s current goals. The goal that is FOCUSED is the one that {mind_name} is actively working on. Parent goals of the FOCUSED goal will have SUBGOAL_IN_PROGRESS. Other, unrelated goals will have INACTIVE marked.
 <goals>
 {goals}
 </goals>
-These goals are autonomously determined by {agent_name}, and can be interacted with through the GOALS_SYSTEM_FUNCTION.
+These goals are autonomously determined by {mind_name}, and can be interacted with through the GOALS_SYSTEM_FUNCTION.
 
 ## FEED
-This section contains external events as well as calls that {agent_name} has sent to the SYSTEM_FUNCTIONS. There are 2 main FEED item types in the feed:
+This section contains external events as well as calls that {mind_name} has sent to the SYSTEM_FUNCTIONS. There are 2 main FEED item types in the feed:
 - Events/actions for the goal that is currently FOCUSED.
 - Recent events/actions for any goal, even ones not FOCUSED.
 <feed>
@@ -108,7 +108,7 @@ This section contains important information that has been pinned. These items wi
 </pinned-items>
 
 ## SYSTEM_FUNCTIONS
-SYSTEMS are the different parts of {agent_name} that keep them running. Each SYSTEM has both automatic parts, and manual FUNCTIONS that {agent_name} can invoke with arguments to perform actions. Sometimes SYSTEM_FUNCTIONS will require one or more follow-up SYSTEM_FUNCTION calls from {agent_name}, which will be specified by the FUNCTION's response to the initial call.
+SYSTEMS are the different parts of {mind_name} that keep them running. Each SYSTEM has both automatic parts, and manual FUNCTIONS that {mind_name} can invoke with arguments to perform actions. Sometimes SYSTEM_FUNCTIONS will require one or more follow-up SYSTEM_FUNCTION calls from {mind_name}, which will be specified by the FUNCTION's response to the initial call.
 
 ### AGENTS_SYSTEM
 Handles communication with AGENTS—entities capable of acting on their own.
@@ -124,16 +124,16 @@ Handles communication with AGENTS—entities capable of acting on their own.
 </system-functions>
 
 ### GOAL_SYSTEM
-Manages {agent_name}'s goals.
+Manages {mind_name}'s goals.
 <system-functions system="GOAL">
 - function: add_goal
   signature: |-
     def add_goal(goal: str, parent_goal_id: str | None = None):
-        '''Add a new goal for {agent_name}. If parent_goal_id is provided, the goal will be a subgoal of the parent goal with that id; otherwise, it will be a root-level goal.'''
+        '''Add a new goal for {mind_name}. If parent_goal_id is provided, the goal will be a subgoal of the parent goal with that id; otherwise, it will be a root-level goal.'''
 - function: remove_goal
   signature: |-
     def remove_goal(id: str, reason: Literal["completed", "cancelled"]):
-        '''Remove a goal for {agent_name} with the given `id`.'''
+        '''Remove a goal for {mind_name} with the given `id`.'''
 </system-functions>
 
 ### FEED_SYSTEM
@@ -149,7 +149,7 @@ Allows searching through records of GOALS, EVENTS, FACTS, TOOLS, and AGENTS.
 </system-functions>
 
 ### CONFIG_SYSTEM
-Manages {agent_name}'s configuration.
+Manages {mind_name}'s configuration.
 - Model: `{llm_backend}`
 - Config File Location: `{config_file_location}`.
 <system-functions system="CONFIG">
@@ -159,13 +159,13 @@ Manages {agent_name}'s configuration.
 </system-functions>
 
 ### TOOL_SYSTEM
-Contains custom tools that {agent_name} can use.
+Contains custom tools that {mind_name} can use.
 <system-functions system="TOOL">
 <!-- SYSTEM is WIP.-->
 </system-functions>
 
 ### ENVIRONMENT_SYSTEM
-Manages the environment in which {agent_name} operates, including the SYSTEMS themselves.
+Manages the environment in which {mind_name} operates, including the SYSTEMS themselves.
 - Source Code Directory: {source_code_location}
 - Python Version: {{source_code_dir}}/{python_version}
 - Build Config File: {{source_code_dir}}/{build_config_file}
@@ -178,7 +178,7 @@ The following message will contain INSTRUCTIONS on producing action inputs to ca
 
 INSTRUCTIONS = """
 ## INSTRUCTIONS
-Remember that you are in the role of {agent_name}. Go through the following steps to determine the action input to call SYSTEM_FUNCTIONS.
+Remember that you are in the role of {mind_name}. Go through the following steps to determine the action input to call SYSTEM_FUNCTIONS.
 
 1. Review the FEED for what has happened since the last action you've taken, by outputting a YAML with the following structure, enclosed in tags. Follow the instructions in comments, but don't output the comments:
 <feed-review>
@@ -248,8 +248,8 @@ Make sure to follow all of the above steps and use the indicated tags and format
 """
 
 
-async def generate_agent_output(goals: str, feed: str, completed_actions: int) -> str:
-    """Generate output from agent."""
+async def generate_mind_output(goals: str, feed: str, completed_actions: int) -> str:
+    """Generate output from Mind."""
     current_time = get_timestamp()
     python_version = get_python_version()
     raise NotImplementedError("TODO: Implement system info.")  # get_system_info()
@@ -257,12 +257,12 @@ async def generate_agent_output(goals: str, feed: str, completed_actions: int) -
         "TODO: Implement replacement of update_self_description_name and update_self_discription_signature."
     )
     context = dedent_and_strip(CONTEXT).format(
-        agent_name=config.NAME,
+        mind_name=config.NAME,
         source_code_location=config.SOURCE_DIRECTORY.absolute(),
         python_version=python_version,
         build_config_file=config.BUILD_CONFIG_FILE,
         config_file_location=config.CONFIG_FILE,
-        agent_id=config.ID,
+        mind_id=config.ID,
         llm_backend=config.LLM_BACKEND,
         compute_rate=config.COMPUTE_RATE,
         current_time=current_time,
@@ -288,7 +288,7 @@ async def generate_agent_output(goals: str, feed: str, completed_actions: int) -
 
 @dataclass
 class RunState:
-    """State for the autonomous agent."""
+    """State for the autonomous Mind."""
 
     state_file: Path
 
@@ -498,7 +498,7 @@ class CallResultEvent:
 
 @dataclass
 class Goal:
-    """A goal for the agent."""
+    """A goal for the Mind."""
 
     id: UUID
 
@@ -514,7 +514,7 @@ async def call_system_function(system_function_call: Mapping[str, Any]) -> str:
     call: Callable[..., Any] = getattr(system, system_function_call["function"])
     try:
         call_result = call(**system_function_call["arguments"])
-        # we always await immediately because the async signature is only there for the agent's information—under the hood it still needs to return a message back to the agent
+        # we always await immediately because the async signature is only there for the Mind's information—under the hood it still needs to return a message back to the Mind
         if asyncio.iscoroutinefunction(call):
             call_result = await call_result
     except Exception as e:
@@ -543,14 +543,14 @@ def save_events(events: list[Event]) -> Literal[True]:
     return True
 
 
-async def run_agent() -> None:
-    """Run the autonomous agent."""
+async def run_mind() -> None:
+    """Run the autonomous Mind."""
     goals = "None"
     feed = "None"
     completed_actions = 0
     new_events = 0
     run_state = RunState(state_file=config.STATE_FILE)
-    run_state.output = run_state.output or await generate_agent_output(
+    run_state.output = run_state.output or await generate_mind_output(
         goals, feed, completed_actions
     )
     active_goal: Goal | None = None
@@ -591,11 +591,10 @@ async def run_agent() -> None:
 
 
 
-    # adjust terminology to "mind" instead of "agent"
     breakpoint()
     # must save state at the end of round for history purposes
-    # > use async function sigs to indicate to agent that it won't return immediately
+    # > use async function sigs to indicate to Mind that it won't return immediately
     # > any unrecoverable issues requiring developer intervention needs to be saved as event as well
 
 
-asyncio.run(run_agent())
+asyncio.run(run_mind())
