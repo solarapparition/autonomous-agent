@@ -15,7 +15,7 @@ import os
 from pathlib import Path
 import platform
 from textwrap import indent
-from typing import Any, Callable, Mapping, MutableMapping, Self
+from typing import Any, Callable, Literal, Mapping, MutableMapping, Self
 from uuid import UUID, uuid4 as new_uuid
 
 from colorama import Fore
@@ -26,11 +26,13 @@ from autonomous_agent import config
 from autonomous_agent.models import format_messages, query_model
 from autonomous_agent.text import ExtractionError, dedent_and_strip, extract_and_unpack
 from autonomous_agent.helpers import (
+    Timestamp,
     as_yaml_str,
     get_timestamp,
-    save_yaml,
-    load_yaml,
     from_yaml_str,
+    load_yaml,
+    save_yaml,
+    timestamp_to_filename,
 )
 from autonomous_agent.system_functions import config as config_system
 
@@ -357,6 +359,16 @@ class RunState:
         """Set the call result event to state."""
         self.set_and_save("call_result_event", value)
 
+    @property
+    def events_saved(self) -> bool | None:
+        """Get the events saved from state."""
+        return self.state.get("events_saved")
+
+    @events_saved.setter
+    def events_saved(self, value: bool) -> None:
+        """Set the events saved to state."""
+        self.set_and_save("events_saved", value)
+
 
 def extract_output_sections(output: str) -> tuple[str, str]:
     """Extract required info from the output."""
@@ -397,7 +409,7 @@ class FunctionCallEvent:
     id: UUID
     goal_id: UUID | None
     "Id of the goal this action is related to."
-    timestamp: str
+    timestamp: Timestamp
     content: Mapping[str, Any]
 
     @classmethod
@@ -415,20 +427,73 @@ class FunctionCallEvent:
         """Get a summary of the action event."""
         return self.content["action_intention"]
 
-    def __str__(self) -> str:
-        """Get the string representation of the action event."""
+    def __repr__(self) -> str:
+        """Get the string representation of the event."""
         template = """
         id: {id}
         type: function_call
+        timestamp: {timestamp}
         goal_id: {goal_id}
-        summary: {summary}
         content:
         {content}
         """
         content = indent(as_yaml_str(self.content), "  ")
         return dedent_and_strip(template).format(
-            id=self.id, goal_id=self.goal_id, summary=self.summary, content=content
+            id=self.id, goal_id=self.goal_id, timestamp=self.timestamp, content=content
         )
+
+    def __str__(self) -> str:
+        """Printout of action event."""
+        return self.__repr__()
+
+
+@dataclass
+class CallResultEvent:
+    """Event for result of calls."""
+
+    id: UUID
+    timestamp: Timestamp
+    goal_id: UUID | None
+    "Id of the goal this call result is related to."
+    function_call_id: UUID
+    "Id of the function call this result is for."
+    content: str
+    summary: str | None = None
+
+    @classmethod
+    def from_mapping(cls, mapping: Mapping[str, Any]) -> Self:
+        """Create an event from a mapping."""
+        return cls(
+            id=UUID(mapping["id"]),
+            goal_id=UUID(mapping["goal_id"]) if mapping["goal_id"] else None,
+            timestamp=mapping["timestamp"],
+            function_call_id=UUID(mapping["function_call_id"]),
+            content=mapping["content"],
+        )
+
+    def __repr__(self) -> str:
+        """Get the string representation of the action event."""
+        template = """
+        id: {id}
+        type: call_result
+        timestamp: {timestamp}
+        goal_id: {goal_id}
+        function_call_id: {function_call_id}
+        content: |-
+        {content}
+        """
+        content = indent(self.content, "  ")
+        return dedent_and_strip(template).format(
+            id=self.id,
+            goal_id=self.goal_id,
+            timestamp=self.timestamp,
+            function_call_id=self.function_call_id,
+            content=content,
+        )
+
+    def __str__(self) -> str:
+        """Printout of action event."""
+        return self.__repr__()
 
 
 @dataclass
@@ -459,53 +524,23 @@ async def call_system_function(system_function_call: Mapping[str, Any]) -> str:
     return call_result
 
 
-@dataclass
-class CallResultEvent:
-    """Event for result of calls."""
+Event = FunctionCallEvent | CallResultEvent
 
-    id: UUID
-    timestamp: str
-    goal_id: UUID | None
-    "Id of the goal this call result is related to."
-    function_call_id: UUID
-    "Id of the function call this result is for."
-    content: str
 
-    @classmethod
-    def from_mapping(cls, mapping: Mapping[str, Any]) -> Self:
-        """Create an action event from a mapping."""
-        return cls(
-            id=UUID(mapping["id"]),
-            goal_id=UUID(mapping["goal_id"]) if mapping["goal_id"] else None,
-            timestamp=mapping["timestamp"],
-            function_call_id=UUID(mapping["function_call_id"]),
-            content=mapping["content"],
+def save_events(events: list[Event]) -> Literal[True]:
+    """Save the events to disk."""
+
+    def save_event(event: Event) -> None:
+        """Save an event to disk."""
+        event_str = repr(event)
+        event_file = (
+            config.EVENTS_DIRECTORY / f"{timestamp_to_filename(event.timestamp)}.yaml"
         )
+        event_file.write_text(event_str, encoding="utf-8")
 
-    @property
-    def summary(self) -> str:
-        """Get a summary of the action event."""
-        return self.content
-
-    def __str__(self) -> str:
-        """Get the string representation of the action event."""
-        template = """
-        id: {id}
-        type: call_result
-        goal_id: {goal_id}
-        function_call_id: {function_call_id}
-        summary: {summary}
-        content: |-
-        {content}
-        """
-        content = indent(self.content, "  ")
-        return dedent_and_strip(template).format(
-            id=self.id,
-            goal_id=self.goal_id,
-            function_call_id=self.function_call_id,
-            summary=self.summary,
-            content=content,
-        )
+    for event in events:
+        save_event(event)
+    return True
 
 
 async def run_agent() -> None:
@@ -531,6 +566,7 @@ async def run_agent() -> None:
         raise NotImplementedError("TODO: Check for new events after previous action")
     if new_events:
         raise NotImplementedError("TODO: Add summaries to new events")
+        # > reminder: make sure to update source text for new events as well
     run_state.action_event = run_state.action_event or {
         "id": str(new_uuid()),
         "timestamp": get_timestamp(),
@@ -549,12 +585,13 @@ async def run_agent() -> None:
         "content": run_state.call_result,
     }
     call_result_event = CallResultEvent.from_mapping(run_state.call_result_event)  # type: ignore
+    new_events = [function_call_event, call_result_event]
+    run_state.events_saved = run_state.events_saved or save_events(new_events)
 
-    # commit
-    breakpoint()
-    # > save new events > timestamp format so that can be read back in # helpers.timestamp_to_filename and helpers.filename_to_timestamp
-    # > save goals > placeholder
-    # wrap up anything else
+
+
+
+    # adjust terminology to "mind" instead of "agent"
     breakpoint()
     # must save state at the end of round for history purposes
     # > use async function sigs to indicate to agent that it won't return immediately

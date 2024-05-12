@@ -10,6 +10,7 @@ CONFIG_DATA = load_yaml(CONFIG_FILE)
 STATE_FILE = Path("data/run_state.yaml")
 SOURCE_DIRECTORY = Path(__file__).parent.parent
 BUILD_CONFIG_FILE = Path("pyproject.toml")
+EVENTS_DIRECTORY = Path("data/events")
 
 NAME = CONFIG_DATA["name"]
 ID = CONFIG_DATA["id"]
@@ -20,3 +21,6 @@ CORE_MODEL = ChatAnthropic(  # type: ignore
 DEVELOPER = CONFIG_DATA["developer"]
 SELF_DESCRIPTION = str(CONFIG_DATA["self_description"]).format(agent_name=NAME)
 COMPUTE_RATE = str(CONFIG_DATA["compute_rate"]).format(agent_name=NAME)
+
+# actions
+EVENTS_DIRECTORY.mkdir(parents=True, exist_ok=True)
