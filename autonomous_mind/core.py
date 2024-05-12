@@ -10,10 +10,9 @@ Reminders:
 
 import asyncio
 from dataclasses import dataclass
-from functools import cached_property
+from functools import cached_property, lru_cache
 import os
 from pathlib import Path
-import platform
 from textwrap import indent
 from typing import Any, Callable, Literal, Mapping, MutableMapping, Self
 from uuid import UUID, uuid4 as new_uuid
@@ -28,11 +27,13 @@ from autonomous_mind.text import ExtractionError, dedent_and_strip, extract_and_
 from autonomous_mind.helpers import (
     Timestamp,
     as_yaml_str,
+    count_tokens,
     get_timestamp,
     from_yaml_str,
     load_yaml,
     save_yaml,
     timestamp_to_filename,
+    get_machine_info,
 )
 from autonomous_mind.system_functions import config as config_system
 
@@ -41,16 +42,6 @@ def get_python_version() -> str:
     """Get the Python version from the pyproject.toml file."""
     data = toml.load("pyproject.toml")
     return data["tool"]["poetry"]["dependencies"]["python"]
-
-
-def get_system_info() -> dict[str, str]:
-    """Get system information."""
-    return {
-        "system": platform.system(),
-        "release": platform.release(),
-        "machine": platform.machine(),
-        "processor": platform.processor(),
-    }
 
 
 CONTEXT = """
@@ -155,7 +146,7 @@ Manages {mind_name}'s configuration.
 <system-functions system="CONFIG">
 - function: {update_self_description_name}
   signature: |-
-  {update_self_discription_signature}
+  {update_self_description_signature}
 </system-functions>
 
 ### TOOL_SYSTEM
@@ -169,6 +160,8 @@ Manages the environment in which {mind_name} operates, including the SYSTEMS the
 - Source Code Directory: {source_code_location}
 - Python Version: {{source_code_dir}}/{python_version}
 - Build Config File: {{source_code_dir}}/{build_config_file}
+- Machine Info:
+{machine_info}
 <system-functions system="ENVIRONMENT">
 <!-- SYSTEM is WIP.-->
 </system-functions>
@@ -252,16 +245,20 @@ async def generate_mind_output(goals: str, feed: str, completed_actions: int) ->
     """Generate output from Mind."""
     current_time = get_timestamp()
     python_version = get_python_version()
-    raise NotImplementedError("TODO: Implement system info.")  # get_system_info()
-    raise NotImplementedError(
-        "TODO: Implement replacement of update_self_description_name and update_self_discription_signature."
-    )
+    machine_info = indent(as_yaml_str(get_machine_info()), "  ")
+    update_self_description_name = "update_self_description"
+    update_self_description_signature = """
+    def update_self_description(mode: Literal["replace", "append", "prepend"], new_description: str):
+        '''Update {mind_name}'s self-description. By default replaces the current description; set `mode` parameter to change how the new description is added.'''
+    """
+    update_self_description_signature = dedent_and_strip(update_self_description_signature)
     context = dedent_and_strip(CONTEXT).format(
         mind_name=config.NAME,
         source_code_location=config.SOURCE_DIRECTORY.absolute(),
         python_version=python_version,
         build_config_file=config.BUILD_CONFIG_FILE,
         config_file_location=config.CONFIG_FILE,
+        machine_info=machine_info,
         mind_id=config.ID,
         llm_backend=config.LLM_BACKEND,
         compute_rate=config.COMPUTE_RATE,
@@ -271,6 +268,8 @@ async def generate_mind_output(goals: str, feed: str, completed_actions: int) ->
         developer_name=config.DEVELOPER,
         goals=goals,
         feed=feed,
+        update_self_description_name=update_self_description_name,
+        update_self_description_signature=update_self_description_signature,
     )
     instructions = dedent_and_strip(INSTRUCTIONS)
     messages = [
@@ -314,10 +313,30 @@ class RunState:
         self.state_file.unlink()
         del self.state
 
+    def archive(self) -> None:
+        """Archive the state file by renaming it."""
+        timestamp = get_timestamp()
+        archive_name = (
+            self.state_file.parent / timestamp_to_filename(timestamp)
+        ).with_suffix(".yaml")
+        self.finalized_at = timestamp
+        self.state_file.rename(archive_name)
+
     @cached_property
     def state(self) -> MutableMapping[str, Any]:
         """Load the state from disk."""
         return self.load()
+
+    @property
+    def finalized_at(self) -> Timestamp | None:
+        """Get the time that state was finalized at from the state."""
+        timestamp = self.state.get("finalized_at")
+        return Timestamp(timestamp) if timestamp else None
+
+    @finalized_at.setter
+    def finalized_at(self, value: Timestamp) -> None:
+        """Set the time that state was finalized at to the state."""
+        self.set_and_save("finalized_at", value)
 
     @property
     def output(self) -> str | None:
@@ -398,6 +417,7 @@ def extract_output(
     #         "TODO: Check if there is a summary for last action."
     #     )
     if new_events:
+        breakpoint()
         raise NotImplementedError("TODO: check there are summaries for new events.")
     return feed_review, system_function_call  # type: ignore
 
@@ -439,7 +459,10 @@ class FunctionCallEvent:
         """
         content = indent(as_yaml_str(self.content), "  ")
         return dedent_and_strip(template).format(
-            id=self.id, goal_id=self.goal_id, timestamp=self.timestamp, content=content
+            id=self.id,
+            goal_id=self.goal_id or "!!null",
+            timestamp=self.timestamp,
+            content=content,
         )
 
     def __str__(self) -> str:
@@ -485,7 +508,7 @@ class CallResultEvent:
         content = indent(self.content, "  ")
         return dedent_and_strip(template).format(
             id=self.id,
-            goal_id=self.goal_id,
+            goal_id=self.goal_id or "!!null",
             timestamp=self.timestamp,
             function_call_id=self.function_call_id,
             content=content,
@@ -543,34 +566,120 @@ def save_events(events: list[Event]) -> Literal[True]:
     return True
 
 
+def read_event(event_file: Path) -> Event:
+    """Read an event from disk."""
+    event_dict = load_yaml(event_file)
+    type_mapping = {
+        "function_call": FunctionCallEvent,
+        "call_result": CallResultEvent,
+    }
+    return type_mapping[event_dict["type"]].from_mapping(event_dict)
+
+
+@dataclass
+class Feed:
+    """Feed of events and actions."""
+
+    events_directory: Path
+
+    @cached_property
+    def event_files(self) -> list[Path]:
+        """Get the timestamps of all events."""
+        return sorted(list(self.events_directory.iterdir()))
+
+    def events_since_action(self, action_number: int = 1) -> list[Event]:
+        """New events since a certain number of actions ago."""
+        events: list[Event] = []
+        action_count = 0
+        for event_file in reversed(self.event_files):
+            event = read_event(event_file)
+            events.append(event)
+            if isinstance(event, FunctionCallEvent):
+                action_count += 1
+            if action_count == action_number:
+                break
+        return events
+
+    @cached_property
+    def recent_events(self) -> list[Event]:
+        """Get all recent events."""
+        return self.events_since_action(3)
+
+    def format(self, active_goal: UUID | None) -> str:
+        """Get a printable representation of the feed."""
+        # cycle back from the most recent event until we get to ~2000 tokens
+        # max_semi_recent_tokens = 1000
+        max_recent_tokens = 2000
+        recent_events_text = ""
+        current_action_text = ""
+        for file in reversed(self.event_files):
+            event = read_event(file)
+            if active_goal:
+                raise NotImplementedError(
+                    "TODO: Implement filtering of events."
+                )  # > make sure to add contentless versions of recent async events (within last 3 actions)
+            event_repr = as_yaml_str([from_yaml_str(repr(event))])
+            current_action_text = "\n".join([event_repr, current_action_text])
+            if not isinstance(event, FunctionCallEvent):
+                continue
+            proposed_recent_events_text = "\n".join(
+                [current_action_text, recent_events_text]
+            )
+            if count_tokens(proposed_recent_events_text) > max_recent_tokens:
+                raise NotImplementedError("TODO: Rewind back to `recent_events_text`.")
+            recent_events_text = proposed_recent_events_text
+            current_action_text = ""
+        return recent_events_text.strip()
+
+
+@dataclass
+class Goals:
+    """Goals for the Mind."""
+
+    @cached_property
+    def active(self) -> Goal | None:
+        """Get the active goal."""
+        return None
+
+    def format(self) -> str:
+        """Get a printable representation of the goals."""
+        return "None"
+
+
 async def run_mind() -> None:
-    """Run the autonomous Mind."""
-    goals = "None"
-    feed = "None"
-    completed_actions = 0
-    new_events = 0
-    run_state = RunState(state_file=config.STATE_FILE)
+    """
+    Run the autonomous Mind for one round.
+    We do NOT loop this; the Mind has an action rate that determines how often it can act, which is controlled separately.
+    """
+    action_number = config.GLOBAL_STATE["action_number"]
+    completed_actions = action_number - 1
+    goals = Goals()
+    feed = Feed(config.EVENTS_DIRECTORY)
+    run_state = RunState(state_file=config.RUN_STATE_FILE)
     run_state.output = run_state.output or await generate_mind_output(
-        goals, feed, completed_actions
+        goals=goals.format(),
+        feed=feed.format(goals.active.id if goals.active else None),
+        completed_actions=completed_actions,
     )
-    active_goal: Goal | None = None
     try:
         feed_review, system_function_call = extract_output(
-            run_state.output, completed_actions, new_events  # type: ignore
+            run_state.output, completed_actions, feed.events_since_action()  # type: ignore
         )
     except Exception as e:
+        if isinstance(e, NotImplementedError):
+            raise e
         raise NotImplementedError("TODO: Implement extraction error handling.") from e
 
     # at this point we can assume that feed_review and system_function_call have all required values; all issues with the structure output *must* have already been handled by extract_output (with an event attached)
     if completed_actions:
         raise NotImplementedError("TODO: Check for new events after previous action")
-    if new_events:
+    if feed.events_since_action():
         raise NotImplementedError("TODO: Add summaries to new events")
         # > reminder: make sure to update source text for new events as well
     run_state.action_event = run_state.action_event or {
         "id": str(new_uuid()),
         "timestamp": get_timestamp(),
-        "goal_id": str(active_goal.id) if active_goal else None,
+        "goal_id": str(goals.active.id) if goals.active else None,
         "content": system_function_call,
     }
     function_call_event = FunctionCallEvent.from_mapping(run_state.action_event)  # type: ignore
@@ -580,21 +689,20 @@ async def run_mind() -> None:
     run_state.call_result_event = run_state.call_result_event or {
         "id": str(new_uuid()),
         "timestamp": get_timestamp(),
-        "goal_id": str(active_goal.id) if active_goal else None,
+        "goal_id": str(goals.active.id) if goals.active else None,
         "function_call_id": str(function_call_event.id),
         "content": run_state.call_result,
     }
     call_result_event = CallResultEvent.from_mapping(run_state.call_result_event)  # type: ignore
     new_events = [function_call_event, call_result_event]
     run_state.events_saved = run_state.events_saved or save_events(new_events)
+    run_state.archive()
 
 
-
-
-    breakpoint()
-    # must save state at the end of round for history purposes
-    # > use async function sigs to indicate to Mind that it won't return immediately
-    # > any unrecoverable issues requiring developer intervention needs to be saved as event as well
+# > "TODO: Implement replacement of update_self_description_name and update_self_discription_signature."# > condition check for when new events exceed recommended token count
+# > use async function sigs to indicate to Mind that it won't return immediately
+# > any unrecoverable issues requiring developer intervention needs to be saved as event as well
+# > goals need to have motivation
 
 
 asyncio.run(run_mind())

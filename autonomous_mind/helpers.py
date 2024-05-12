@@ -3,11 +3,13 @@
 import datetime
 import os
 from pathlib import Path
-import time
+import platform
 from typing import Mapping, Any, MutableMapping, Sequence, NewType
 
 from ruamel.yaml import YAML
 from ruamel.yaml.compat import StringIO
+import tiktoken
+
 
 Timestamp = NewType("Timestamp", str)
 TimestampFilename = NewType("TimestampFilename", str)
@@ -17,9 +19,10 @@ YAML_SAFE.default_flow_style = False
 YAML_SAFE.default_style = "|"  # type: ignore
 YAML_SAFE.allow_unicode = True
 DEFAULT_YAML = YAML()
-DEFAULT_YAML.default_flow_style = False
-DEFAULT_YAML.default_style = "|"  # type: ignore
+# DEFAULT_YAML.default_flow_style = None
+# DEFAULT_YAML.default_style = "|"  # type: ignore
 DEFAULT_YAML.allow_unicode = True
+ENCODER = tiktoken.get_encoding("cl100k_base")
 
 
 def save_yaml(
@@ -67,9 +70,9 @@ def as_yaml_str(
 #     return Timestamp(f"{date_part} {time_part}")
 
 
-def get_timestamp() -> str:
+def get_timestamp() -> Timestamp:
     """Get the current timestamp in UTC with microseconds."""
-    return f"{datetime.datetime.now(tz=None).isoformat()}Z"
+    return Timestamp(f"{datetime.datetime.now(tz=None).isoformat()}Z")
 
 
 def timestamp_to_filename(timestamp: str) -> str:
@@ -77,9 +80,24 @@ def timestamp_to_filename(timestamp: str) -> str:
     return timestamp.replace(":", "-").replace(".", "-").replace("T", "_T")
 
 
-def filename_to_timestamp(filename: str) -> str:
+def filename_to_timestamp(filename: str) -> Timestamp:
     """Convert a filename to a timestamp."""
     date_part, time_part = filename.split("_T")
     time_part = time_part.replace("-", ":", 2)  # Restore colons for the hour and minute
     time_part = time_part.replace("-", ".")  # Restore the period for microseconds
-    return f"{date_part}T{time_part}"
+    return Timestamp(f"{date_part}T{time_part}")
+
+
+def count_tokens(text: str) -> int:
+    """Count the number of tokens in a text."""
+    return len(ENCODER.encode(text))
+
+def get_machine_info() -> dict[str, str]:
+    """Get system information."""
+    return {
+        "system": platform.system(),
+        "release": platform.release(),
+        "machine": platform.machine(),
+        "processor": platform.processor(),
+    }
+
