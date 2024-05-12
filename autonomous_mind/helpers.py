@@ -1,4 +1,4 @@
-"""Helpers for autonomous agent systems."""
+"""Helpers for systems."""
 
 import datetime
 import os

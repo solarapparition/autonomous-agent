@@ -1,1 +1,1 @@
-# autonomous-agent
+# autonomous-mind

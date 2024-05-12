@@ -2,8 +2,8 @@
 
 from typing import Literal
 
-from autonomous_agent import config
-from autonomous_agent.helpers import save_yaml
+from autonomous_mind import config
+from autonomous_mind.helpers import save_yaml
 
 
 async def update_self_description(

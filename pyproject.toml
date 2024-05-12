@@ -1,5 +1,5 @@
 [tool.poetry]
-name = "autonomous-agent"
+name = "autonomous-mind"
 version = "0.1.2"
 description = ""
 authors = ["Mengyang (John) Cha <15233508+solarapparition@users.noreply.github.com>"]
