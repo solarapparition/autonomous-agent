@@ -69,31 +69,35 @@ def unpack_block(
     extracted_result: list[str] | None,
     start_block_type: str,
     end_block_type: str,
+    allow_multiple: bool,
 ) -> str:
     """Validate and unpack the extracted block."""
-    if not extracted_result:
+    if (not extracted_result) or (len(extracted_result) > 1 and not allow_multiple):
+        num_blocks_found = len(extracted_result) if extracted_result else 0
         raise ExtractionError(
             text=text,
             start_block_type=start_block_type,
             end_block_type=end_block_type,
-            num_blocks_found=0,
+            num_blocks_found=num_blocks_found,
         )
-    if len(extracted_result) != 1:
-        raise ExtractionError(
-            text=text,
-            start_block_type=start_block_type,
-            end_block_type=end_block_type,
-            num_blocks_found=len(extracted_result),
-        )
-    (block,) = extracted_result
-    return block
+    return extracted_result[-1]
 
 
 def extract_and_unpack(
-    text: str, start_block_type: str, end_block_type: str = "", prefix: str = ""
+    text: str,
+    start_block_type: str,
+    end_block_type: str = "",
+    prefix: str = "",
+    allow_multiple: bool = True,
 ) -> str:
     """Extract and unpack a block."""
     extracted_result = extract_blocks(
         text, start_block_type, end_block_type, prefix=prefix
     )
-    return unpack_block(text, extracted_result, start_block_type, end_block_type)
+    return unpack_block(
+        text,
+        extracted_result,
+        start_block_type,
+        end_block_type,
+        allow_multiple=allow_multiple,
+    )

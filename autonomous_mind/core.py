@@ -2,10 +2,6 @@
 Core functionality for the autonomous Mind.
 
 IMPORTANT NOTE: this contains the core functionality for the autonomous Mind. Incorrectly modifying these can cause the Mind to crash. Please proceed with caution.
-
-Reminders:
-- The end user is NOT other people but the Mind itself.
-- Keep the code here as direct as possible—this will be read by the Mind and we don't to avoid going through layers of abstraction to understand what's happening.
 """
 
 import asyncio
@@ -14,7 +10,7 @@ from functools import cached_property, lru_cache
 import os
 from pathlib import Path
 from textwrap import indent
-from typing import Any, Callable, Literal, Mapping, MutableMapping, Self
+from typing import Any, Callable, Literal, Mapping, MutableMapping, Self, Sequence
 from uuid import UUID, uuid4 as new_uuid
 
 from colorama import Fore
@@ -25,9 +21,11 @@ from autonomous_mind import config
 from autonomous_mind.models import format_messages, query_model
 from autonomous_mind.text import ExtractionError, dedent_and_strip, extract_and_unpack
 from autonomous_mind.helpers import (
+    LONG_STR_YAML,
     Timestamp,
     as_yaml_str,
     count_tokens,
+    format_timestamp,
     get_timestamp,
     from_yaml_str,
     load_yaml,
@@ -35,7 +33,8 @@ from autonomous_mind.helpers import (
     timestamp_to_filename,
     get_machine_info,
 )
-from autonomous_mind.system_functions import config as config_system
+from autonomous_mind.systems.config import functions as config_functions
+from autonomous_mind.systems.goal import functions as goal_functions
 
 
 def get_python_version() -> str:
@@ -70,24 +69,18 @@ This is {mind_name}'s self-description.
 It can be edited using the appropriate CONFIG_SYSTEM FUNCTION.
 
 ## GOALS
-This section contains {mind_name}'s current goals. The goal that is FOCUSED is the one that {mind_name} is actively working on. Parent goals of the FOCUSED goal will have SUBGOAL_IN_PROGRESS. Other, unrelated goals will have INACTIVE marked.
+This section contains {mind_name}'s current goals. The goal that is FOCUSED is the one that {mind_name} is actively working on. Parent goals of the FOCUSED goal will have SUBGOAL_FOCUSED. Other, unrelated goals will have INACTIVE marked.
 <goals>
 {goals}
 </goals>
 These goals are autonomously determined by {mind_name}, and can be interacted with through the GOALS_SYSTEM_FUNCTION.
 
-## FEED
-This section contains external events as well as calls that {mind_name} has sent to the SYSTEM_FUNCTIONS. There are 2 main FEED item types in the feed:
-- Events/actions for the goal that is currently FOCUSED.
-- Recent events/actions for any goal, even ones not FOCUSED.
-<feed>
-{feed}
-</feed>
-FEED items are automatically populated by the FEED_SYSTEM, and can be interacted with through FUNCTIONS for that SYSTEM. The FEED shows a maximum amount of tokens in total and per item, and will be summarized/truncated automatically if it exceeds these limits.
+## KNOWLEDGE
+This section contains {mind_name}'s KNOWLEDGE_NODES that have been loaded. KNOWLEDGE NODES are chunks of information that {mind_name} has automatically or manually learned. Any data in the SYSTEM that has an `id` can become a KNOWLEDGE_NODE.
 
-## PINNED_RECORDS
-This section contains important information that has been pinned. These items will not be automatically removed. Any data in the SYSTEM that has an `id` can be pinned.
-<pinned-items>
+### PINNED_KNOWLEDGE_NODES
+Pinned nodes will not be automatically removed.
+<knowledge-subsection="pinned-nodes">
 - type: agent_info
   content: |-
     id: 25b9a536-54d0-4162-bae9-ec81dba993e9
@@ -96,7 +89,24 @@ This section contains important information that has been pinned. These items wi
   pin_timestamp: 2024-05-08 14:21:46Z
   context: |-
     pinning this fyi, since you're stuck with having to talk to me for awhile. once we've got you fully autonomous you can unpin this, if you want to --solar
-</pinned-items>
+</knowledge-subsection>
+
+### LOADED_KNOWLEDGE_NODES
+Loaded KNOWLEDGE_NODES that are not pinned. These will be removed as needed when the maximum token count for the section is exceeded..
+<knowledge-subsection="loaded-nodes">
+None
+</knowledge-subsection>
+KNOWLEDGE_NODES are can be interacted with through FUNCTIONS for that SYSTEM.
+
+## FEED
+This section contains external events as well as calls that {mind_name} has sent to the SYSTEM_FUNCTIONS. There are 2 main FEED item types in the feed:
+- Events/actions for the goal that is currently FOCUSED.
+- Recent events/actions for any goal, even ones not FOCUSED.
+The FEED shows a maximum amount of tokens in total and per item, and will be summarized/truncated automatically if it exceeds these limits.
+<feed>
+{feed}
+</feed>
+FEED items are automatically populated by the FEED_SYSTEM, and can be interacted with through FUNCTIONS for that SYSTEM. 
 
 ## SYSTEM_FUNCTIONS
 SYSTEMS are the different parts of {mind_name} that keep them running. Each SYSTEM has both automatic parts, and manual FUNCTIONS that {mind_name} can invoke with arguments to perform actions. Sometimes SYSTEM_FUNCTIONS will require one or more follow-up SYSTEM_FUNCTION calls from {mind_name}, which will be specified by the FUNCTION's response to the initial call.
@@ -119,8 +129,13 @@ Manages {mind_name}'s goals.
 <system-functions system="GOAL">
 - function: add_goal
   signature: |-
-    def add_goal(goal: str, parent_goal_id: str | None = None):
-        '''Add a new goal for {mind_name}. If parent_goal_id is provided, the goal will be a subgoal of the parent goal with that id; otherwise, it will be a root-level goal.'''
+    def add_goal(summary: str, details: str, parent_goal_id: str | None = None, switch_focus: bool = True):
+        '''
+        `summary` should be no more than a sentence.
+        `details` should only be provided if the goal requires more explanation than can be given in the `summary`.
+        If parent_goal_id is provided, the goal will be a subgoal of the parent goal with that id; otherwise, it will be a root-level goal.
+        If `switch_focus` is True, then the new goal will automatically become the FOCUSED goal.
+        '''
 - function: remove_goal
   signature: |-
     def remove_goal(id: str, reason: Literal["completed", "cancelled"]):
@@ -129,14 +144,24 @@ Manages {mind_name}'s goals.
 
 ### FEED_SYSTEM
 Manages the FEED of events and actions.
+- Max Feed Tokens: {max_feed_tokens}
 <system-functions system="FEED">
 <!-- SYSTEM is WIP.-->
 </system-functions>
 
-### RECORDS_SYSTEM
-Allows searching through records of GOALS, EVENTS, FACTS, TOOLS, and AGENTS.
-<system-functions system="RECORDS">
-<!-- SYSTEM is WIP.-->
+### KNOWLEDGE_SYSTEM
+Allows searching through knowledge of GOALS, EVENTS, FACTS, TOOLS, and AGENTS.
+- Max Knowledge Tokens: {max_knowledge_tokens}
+<system-functions system="KNOWLEDGE">
+- function: save_knowledge_node
+  signature: |-
+    def save_knowledge_node(content: str, context: str, summary: str, load_to_knowledge: bool = True):
+        '''
+        Save a new KNOWLEDGE_NODE with the given `content`.
+        `context` adds context that might not be obvious from just the `content`.
+        `summary` should be no more than a sentence.
+        `load_to_knowledge` determines whether the node should be immediately loaded into the KNOWLEDGE or not.
+        '''
 </system-functions>
 
 ### CONFIG_SYSTEM
@@ -158,7 +183,7 @@ Contains custom tools that {mind_name} can use.
 ### ENVIRONMENT_SYSTEM
 Manages the environment in which {mind_name} operates, including the SYSTEMS themselves.
 - Source Code Directory: {source_code_location}
-- Python Version: {{source_code_dir}}/{python_version}
+- Python Version: python_version
 - Build Config File: {{source_code_dir}}/{build_config_file}
 - Machine Info:
 {machine_info}
@@ -178,12 +203,12 @@ Remember that you are in the role of {mind_name}. Go through the following steps
 my_last_action: |-
   {my_last_action} # what you were trying to do with your last action
 new_events: # events in the FEED that have happened since your last action (whether related to it or not)
-  - feed_id: {feed_id} # id of the feed item
+  - event_id: {event_id} # id of the feed item
     related_to: |-
       {related_to} # what goal/action/event this event is related to; mention specific ids if present
     summary: |-
       {summary} # a brief (1-sentence) summary of the event; mention specific ids of relevant entities if present
-  - [...] # more events; you can list multiple events for one feed item if more than one event happened within the feed item
+  - [...] # more events
 action_outcome:
   outcome: |-
     {outcome} # factually, what happened as a result of your last action (if anything), given the new events related to your previous action; ignore events that are not related to your last action
@@ -194,15 +219,15 @@ action_outcome:
 
 2. Create a REASONING_PROCEDURE. The REASONING_PROCEDURE is a nested tree structure that provides abstract procedural reasoning that, when executed, processes the raw information presented above and outputs a decision or action.
 Suggestions for the REASONING_PROCEDURE:
-- Use whatever structure is most comfortable, but it should allow arbitrary nesting levels to enable deep analysis—common choices include pseudocode, YAML, pseudo-XML, or JSON, or novel combinations of these. The key is to densely represent meaning and reasoning.
-- Include ids for parts of the tree to allow for references and to jump back and fourth between parts of the process. Freely reference those ids to allow for a complex, interconnected reasoning process.
-- The REASONING_PROCEDURE should synthesize and reference information from all sections above (INFORMATION, GOALS, FEED, PINNED_RECORDS, SYSTEM_FUNCTIONS).
+- Use whatever structure is most comfortable, but it should allow arbitrary nesting levels to enable deep analysis—common choices include YAML, pseudocode, pseudo-XML, JSON, or novel combinations of these. The key is to densely represent meaning and reasoning.
+- Include unique ids for nodes of the tree to allow for references and to jump back and fourth between parts of the process. Freely reference those ids to allow for a complex, interconnected reasoning process.
+- The REASONING_PROCEDURE should synthesize and reference information from all sections above (INFORMATION, GOALS, FEED, KNOWLEDGE, SYSTEM_FUNCTIONS).
 - It may be effective to build up the procedure hierarchically, starting from examining basic facts, to more advanced compositional analysis, similar to writing a procedural script for a program but interpretable by you.
 IMPORTANT: The REASONING_PROCEDURE must be output within the following XML tags (but content within the tags can be any format, as mentioned above):
 <reasoning-procedure>
 {reasoning_procedure}
 </reasoning-procedure>
-IMPORTANT: the REASONING_PROCEDURE is ONLY the procedure for reasoning; do NOT actually execute the procedure—that will be done in the next step.
+IMPORTANT: the REASONING_PROCEDURE is only the **abstract** procedure for structuring your reasoning at a high level; for step 2 you will not actually execute the procedure—that will be done in step 3.
 
 3. Execute the REASONING_PROCEDURE and output results from _all_ parts of the procedure, within the following tags:
 <reasoning-output>
@@ -241,6 +266,10 @@ Make sure to follow all of the above steps and use the indicated tags and format
 """
 
 
+max_recent_feed_tokens = 2000
+max_knowledge_tokens = 1500
+
+
 async def generate_mind_output(goals: str, feed: str, completed_actions: int) -> str:
     """Generate output from Mind."""
     current_time = get_timestamp()
@@ -251,7 +280,9 @@ async def generate_mind_output(goals: str, feed: str, completed_actions: int) ->
     def update_self_description(mode: Literal["replace", "append", "prepend"], new_description: str):
         '''Update {mind_name}'s self-description. By default replaces the current description; set `mode` parameter to change how the new description is added.'''
     """
-    update_self_description_signature = dedent_and_strip(update_self_description_signature)
+    update_self_description_signature = dedent_and_strip(
+        update_self_description_signature
+    )
     context = dedent_and_strip(CONTEXT).format(
         mind_name=config.NAME,
         source_code_location=config.SOURCE_DIRECTORY.absolute(),
@@ -268,6 +299,8 @@ async def generate_mind_output(goals: str, feed: str, completed_actions: int) ->
         developer_name=config.DEVELOPER,
         goals=goals,
         feed=feed,
+        max_feed_tokens=max_recent_feed_tokens,
+        max_knowledge_tokens=max_knowledge_tokens,
         update_self_description_name=update_self_description_name,
         update_self_description_signature=update_self_description_signature,
     )
@@ -299,7 +332,7 @@ class RunState:
     def save(self) -> None:
         """Save the state to disk."""
         os.makedirs(self.state_file.parent, exist_ok=True)
-        save_yaml(self.state, self.state_file)
+        save_yaml(self.state, self.state_file, yaml=LONG_STR_YAML)
 
     def set_and_save(self, key: str, value: Any) -> None:
         """Set a key in the state and save it."""
@@ -388,17 +421,23 @@ class RunState:
         """Set the events saved to state."""
         self.set_and_save("events_saved", value)
 
+    @property
+    def events_updated(self) -> bool | None:
+        """Get the events updated from state."""
+        return self.state.get("events_updated")
+
+    @events_updated.setter
+    def events_updated(self, value: bool) -> None:
+        """Set the events updated to state."""
+        self.set_and_save("events_updated", value)
+
 
 def extract_output_sections(output: str) -> tuple[str, str]:
     """Extract required info from the output."""
     feed_review = extract_and_unpack(
         output, start_block_type="<feed-review>", end_block_type="</feed-review>"
     )
-    system_function_call = extract_and_unpack(
-        output,
-        start_block_type="<system-function-call>",
-        end_block_type="</system-function-call>",
-    )
+    system_function_call = extract_and_unpack(output,start_block_type="<system-function-call>",end_block_type="</system-function-call>")
     return feed_review, system_function_call
 
 
@@ -416,9 +455,8 @@ def extract_output(
     #     raise NotImplementedError(
     #         "TODO: Check if there is a summary for last action."
     #     )
-    if new_events:
-        breakpoint()
-        raise NotImplementedError("TODO: check there are summaries for new events.")
+    # if new_events:
+    #     raise NotImplementedError("TODO: check there are summaries for new events.")
     return feed_review, system_function_call  # type: ignore
 
 
@@ -431,6 +469,7 @@ class FunctionCallEvent:
     "Id of the goal this action is related to."
     timestamp: Timestamp
     content: Mapping[str, Any]
+    success: Literal[-1, 0, 1] = 0
 
     @classmethod
     def from_mapping(cls, mapping: Mapping[str, Any]) -> Self:
@@ -438,7 +477,7 @@ class FunctionCallEvent:
         return cls(
             id=UUID(mapping["id"]),
             goal_id=UUID(mapping["goal_id"]) if mapping["goal_id"] else None,
-            timestamp=mapping["timestamp"],
+            timestamp=format_timestamp(mapping["timestamp"]),
             content=mapping["content"],
         )
 
@@ -456,6 +495,7 @@ class FunctionCallEvent:
         goal_id: {goal_id}
         content:
         {content}
+        success: {success}
         """
         content = indent(as_yaml_str(self.content), "  ")
         return dedent_and_strip(template).format(
@@ -463,6 +503,7 @@ class FunctionCallEvent:
             goal_id=self.goal_id or "!!null",
             timestamp=self.timestamp,
             content=content,
+            success=self.success,
         )
 
     def __str__(self) -> str:
@@ -481,7 +522,7 @@ class CallResultEvent:
     function_call_id: UUID
     "Id of the function call this result is for."
     content: str
-    summary: str | None = None
+    summary: str = ""
 
     @classmethod
     def from_mapping(cls, mapping: Mapping[str, Any]) -> Self:
@@ -489,7 +530,7 @@ class CallResultEvent:
         return cls(
             id=UUID(mapping["id"]),
             goal_id=UUID(mapping["goal_id"]) if mapping["goal_id"] else None,
-            timestamp=mapping["timestamp"],
+            timestamp=format_timestamp(mapping["timestamp"]),
             function_call_id=UUID(mapping["function_call_id"]),
             content=mapping["content"],
         )
@@ -504,14 +545,18 @@ class CallResultEvent:
         function_call_id: {function_call_id}
         content: |-
         {content}
+        summary: |-
+        {summary}
         """
         content = indent(self.content, "  ")
+        summary = indent(self.summary, "  ")
         return dedent_and_strip(template).format(
             id=self.id,
             goal_id=self.goal_id or "!!null",
             timestamp=self.timestamp,
             function_call_id=self.function_call_id,
             content=content,
+            summary=summary,
         )
 
     def __str__(self) -> str:
@@ -524,26 +569,33 @@ class Goal:
     """A goal for the Mind."""
 
     id: UUID
+    timestamp: Timestamp
 
 
-async def call_system_function(system_function_call: Mapping[str, Any]) -> str:
+async def call_system_function(call_args: Mapping[str, Any]) -> str:
     """Call a system function."""
-    system_mapping = {"CONFIG": config_system}
-    system = system_mapping.get(system_function_call["system"])
+    system_mapping = {"CONFIG": config_functions, "GOAL": goal_functions}
+    system = system_mapping.get(call_args["system"])
     if not system:
+        raise NotImplementedError(f"TODO: Implement {call_args['system']} system.")
+
+    call: Callable[..., Any] | None = getattr(system, call_args["function"], None)
+    if not call:
         raise NotImplementedError(
-            f"TODO: Implement {system_function_call['system']} system."
+            f"TODO: Implement {call_args['system']}.{call_args['function']} function."
         )
-    call: Callable[..., Any] = getattr(system, system_function_call["function"])
     try:
-        call_result = call(**system_function_call["arguments"])
+        call_result = call(**call_args["arguments"])
         # we always await immediately because the async signature is only there for the Mind's information—under the hood it still needs to return a message back to the Mind
         if asyncio.iscoroutinefunction(call):
             call_result = await call_result
+    except NotImplementedError as e:
+        raise e
     except Exception as e:
         raise NotImplementedError(
             "TODO: Implement error handling for function calls."
         ) from e
+    breakpoint()
     return call_result
 
 
@@ -566,6 +618,7 @@ def save_events(events: list[Event]) -> Literal[True]:
     return True
 
 
+@lru_cache(maxsize=None)
 def read_event(event_file: Path) -> Event:
     """Read an event from disk."""
     event_dict = load_yaml(event_file)
@@ -587,13 +640,13 @@ class Feed:
         """Get the timestamps of all events."""
         return sorted(list(self.events_directory.iterdir()))
 
-    def events_since_action(self, action_number: int = 1) -> list[Event]:
+    def call_event_batch(self, action_number: int = 1) -> list[Event]:
         """New events since a certain number of actions ago."""
         events: list[Event] = []
         action_count = 0
         for event_file in reversed(self.event_files):
             event = read_event(event_file)
-            events.append(event)
+            events.insert(0, event)
             if isinstance(event, FunctionCallEvent):
                 action_count += 1
             if action_count == action_number:
@@ -603,18 +656,17 @@ class Feed:
     @cached_property
     def recent_events(self) -> list[Event]:
         """Get all recent events."""
-        return self.events_since_action(3)
+        return self.call_event_batch(3)
 
-    def format(self, active_goal: UUID | None) -> str:
+    def format(self, focused_goal: UUID | None) -> str:
         """Get a printable representation of the feed."""
         # cycle back from the most recent event until we get to ~2000 tokens
         # max_semi_recent_tokens = 1000
-        max_recent_tokens = 2000
         recent_events_text = ""
         current_action_text = ""
         for file in reversed(self.event_files):
             event = read_event(file)
-            if active_goal:
+            if focused_goal:
                 raise NotImplementedError(
                     "TODO: Implement filtering of events."
                 )  # > make sure to add contentless versions of recent async events (within last 3 actions)
@@ -625,7 +677,7 @@ class Feed:
             proposed_recent_events_text = "\n".join(
                 [current_action_text, recent_events_text]
             )
-            if count_tokens(proposed_recent_events_text) > max_recent_tokens:
+            if count_tokens(proposed_recent_events_text) > max_recent_feed_tokens:
                 raise NotImplementedError("TODO: Rewind back to `recent_events_text`.")
             recent_events_text = proposed_recent_events_text
             current_action_text = ""
@@ -637,13 +689,34 @@ class Goals:
     """Goals for the Mind."""
 
     @cached_property
-    def active(self) -> Goal | None:
-        """Get the active goal."""
+    def focused(self) -> Goal | None:
+        """Get the focused goal."""
         return None
 
     def format(self) -> str:
         """Get a printable representation of the goals."""
         return "None"
+
+
+def update_new_events(
+    last_function_call: FunctionCallEvent,
+    events_since_call: Sequence[Event],
+    feed_review: Mapping[str, Any],
+) -> Literal[True]:
+    """Update the new events info from the feed review."""
+    for event in events_since_call:
+        assert not isinstance(event, FunctionCallEvent)
+        event_review = next(
+            (
+                review_item
+                for review_item in feed_review["new_events"]
+                if review_item["event_id"] == str(event.id)
+            )
+        )
+        event.summary = event_review["summary"]
+    if (action_success := feed_review["action_outcome"]["action_success"]) in [-1, 1]:
+        last_function_call.success = action_success
+    return save_events([last_function_call, *events_since_call])
 
 
 async def run_mind() -> None:
@@ -658,28 +731,39 @@ async def run_mind() -> None:
     run_state = RunState(state_file=config.RUN_STATE_FILE)
     run_state.output = run_state.output or await generate_mind_output(
         goals=goals.format(),
-        feed=feed.format(goals.active.id if goals.active else None),
+        feed=feed.format(goals.focused.id if goals.focused else None),
         completed_actions=completed_actions,
     )
+    call_event_batch = feed.call_event_batch()
+    if completed_actions:
+        last_function_call = call_event_batch[0]
+        assert isinstance(last_function_call, FunctionCallEvent)
+        events_since_call = call_event_batch[1:]
+    else:
+        last_function_call = None
+        events_since_call = []
+    # last_function_call = call_event_batch[0]
+    # assert isinstance(last_function_call, FunctionCallEvent)
+    # events_since_call = call_event_batch[1:] if completed_actions else []
     try:
         feed_review, system_function_call = extract_output(
-            run_state.output, completed_actions, feed.events_since_action()  # type: ignore
+            run_state.output, completed_actions, len(events_since_call)  # type: ignore
         )
+    except NotImplementedError as e:
+        raise e
     except Exception as e:
-        if isinstance(e, NotImplementedError):
-            raise e
         raise NotImplementedError("TODO: Implement extraction error handling.") from e
 
-    # at this point we can assume that feed_review and system_function_call have all required values; all issues with the structure output *must* have already been handled by extract_output (with an event attached)
-    if completed_actions:
-        raise NotImplementedError("TODO: Check for new events after previous action")
-    if feed.events_since_action():
-        raise NotImplementedError("TODO: Add summaries to new events")
-        # > reminder: make sure to update source text for new events as well
+    # at this point we can assume that feed_review and system_function_call have all required values; any issues that happen beyond this point *must* be added as a check to `extract_output` above so that it get handled earlier
+    # - check: all events in events_since_action have corresponding items in feed_review
+    if last_function_call:
+        run_state.events_updated = run_state.events_updated or update_new_events(
+            last_function_call, events_since_call, feed_review
+        )
     run_state.action_event = run_state.action_event or {
         "id": str(new_uuid()),
         "timestamp": get_timestamp(),
-        "goal_id": str(goals.active.id) if goals.active else None,
+        "goal_id": str(goals.focused.id) if goals.focused else None,
         "content": system_function_call,
     }
     function_call_event = FunctionCallEvent.from_mapping(run_state.action_event)  # type: ignore
@@ -689,7 +773,7 @@ async def run_mind() -> None:
     run_state.call_result_event = run_state.call_result_event or {
         "id": str(new_uuid()),
         "timestamp": get_timestamp(),
-        "goal_id": str(goals.active.id) if goals.active else None,
+        "goal_id": str(goals.focused.id) if goals.focused else None,
         "function_call_id": str(function_call_event.id),
         "content": run_state.call_result,
     }

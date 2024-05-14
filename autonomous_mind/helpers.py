@@ -22,6 +22,11 @@ DEFAULT_YAML = YAML()
 # DEFAULT_YAML.default_flow_style = None
 # DEFAULT_YAML.default_style = "|"  # type: ignore
 DEFAULT_YAML.allow_unicode = True
+LONG_STR_YAML = YAML()
+LONG_STR_YAML.default_flow_style = None
+LONG_STR_YAML.default_style = "|"  # type: ignore
+LONG_STR_YAML.allow_unicode = True
+
 ENCODER = tiktoken.get_encoding("cl100k_base")
 
 
@@ -75,6 +80,13 @@ def get_timestamp() -> Timestamp:
     return Timestamp(f"{datetime.datetime.now(tz=None).isoformat()}Z")
 
 
+def format_timestamp(timestamp: datetime.datetime | str) -> Timestamp:
+    """Format a timestamp into what we're using in this codebase."""
+    if isinstance(timestamp, str):
+        timestamp = datetime.datetime.fromisoformat(timestamp)
+    return Timestamp(timestamp.strftime("%Y-%m-%dT%H:%M:%S.%f") + "Z")
+
+
 def timestamp_to_filename(timestamp: str) -> str:
     """Convert a timestamp to a filename."""
     return timestamp.replace(":", "-").replace(".", "-").replace("T", "_T")
@@ -92,6 +104,7 @@ def count_tokens(text: str) -> int:
     """Count the number of tokens in a text."""
     return len(ENCODER.encode(text))
 
+
 def get_machine_info() -> dict[str, str]:
     """Get system information."""
     return {
@@ -100,4 +113,3 @@ def get_machine_info() -> dict[str, str]:
         "machine": platform.machine(),
         "processor": platform.processor(),
     }
-
