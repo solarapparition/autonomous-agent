@@ -13,7 +13,7 @@ from autonomous_mind.helpers import (
     from_yaml_str,
     load_yaml,
 )
-from autonomous_mind.schema import CallResultEvent, Event, FunctionCallEvent
+from autonomous_mind.schema import CallResultEvent, Event, FunctionCallEvent, Item
 from autonomous_mind.systems.helpers import save_items
 
 
@@ -31,6 +31,16 @@ def read_event(event_file: Path) -> Event:
         "call_result": CallResultEvent,
     }
     return type_mapping[event_dict["type"]].from_mapping(event_dict)
+
+
+def full_itemized_repr(item: Item) -> str:
+    """Give full representation of event as an item."""
+    return as_yaml_str([from_yaml_str(repr(item))])
+
+
+def short_itemized_repr(item: Item) -> str:
+    """Give short representation of an item."""
+    return as_yaml_str([from_yaml_str(str(item))])
 
 
 @dataclass
@@ -64,21 +74,26 @@ class Feed:
 
     def format(self, focused_goal: UUID | None) -> str:
         """Get a printable representation of the feed."""
-        # cycle back from the most recent event until we get to ~2000 tokens
         # max_semi_recent_tokens = 1000
         recent_events_text = ""
         current_action_text = ""
+        action_number = 1
         for file in reversed(self.event_files):
             event = read_event(file)
-            if focused_goal:
-                breakpoint()
-                raise NotImplementedError(
-                    "TODO: Implement filtering of events."
-                )  # > make sure to add contentless versions of recent async events (within last 3 actions)
-            event_repr = as_yaml_str([from_yaml_str(repr(event))])
+            # we represent the event differently depending on various conditions
+            if focused_goal and action_number > 3 and event.goal_id != focused_goal:
+                # hide older events not related to the focused goal
+                continue
+            if action_number == 1 or (not focused_goal and action_number <= 3):
+                # always show last events in full; also show recent events in full if not focused on specific goal
+                event_repr = full_itemized_repr(event)
+            else:
+                # otherwise show abbreviated version of event
+                event_repr = short_itemized_repr(event)
             current_action_text = "\n".join([event_repr, current_action_text])
             if not isinstance(event, FunctionCallEvent):
                 continue
+            action_number += 1
             proposed_recent_events_text = "\n".join(
                 [current_action_text, recent_events_text]
             )

@@ -446,21 +446,21 @@ def extract_output_sections(output: str) -> tuple[str, str]:
 
 def extract_output(
     output: str, completed_actions: int, new_events: int
-) -> tuple[MutableMapping[str, Any], MutableMapping[str, Any]]:
+) -> tuple[MutableMapping[str, Any], MutableMapping[str, Any], str]:
     """Extract the output sections."""
     try:
-        feed_review, system_function_call = extract_output_sections(output)  # type: ignore
+        feed_review, function_call_raw = extract_output_sections(output)  # type: ignore
     except ExtractionError as e:
         raise NotImplementedError("TODO: Implement error output flow.") from e
     feed_review = from_yaml_str(feed_review)  # type: ignore
-    system_function_call = from_yaml_str(system_function_call)  # type: ignore
+    system_function_call = from_yaml_str(function_call_raw)  # type: ignore
     # if completed_actions:
     #     raise NotImplementedError(
     #         "TODO: Check if there is a summary for last action."
     #     )
     # if new_events:
     #     raise NotImplementedError("TODO: check there are summaries for new events.")
-    return feed_review, system_function_call  # type: ignore
+    return feed_review, system_function_call, function_call_raw  # type: ignore
 
 
 async def call_system_function(call_args: Mapping[str, Any]) -> str:
@@ -571,7 +571,7 @@ async def run_mind() -> None:
     # assert isinstance(last_function_call, FunctionCallEvent)
     # events_since_call = call_event_batch[1:] if completed_actions else []
     try:
-        feed_review, system_function_call = extract_output(
+        feed_review, system_function_call, function_call_raw = extract_output(
             run_state.output, completed_actions, len(events_since_call)  # type: ignore
         )
     except NotImplementedError as e:
@@ -589,7 +589,8 @@ async def run_mind() -> None:
         "id": str(new_uuid()),
         "timestamp": get_timestamp(),
         "goal_id": str(goals.focused) if goals.focused else None,
-        "content": system_function_call,
+        "summary": system_function_call["action_intention"],
+        "content": function_call_raw,
     }
     function_call_event = FunctionCallEvent.from_mapping(run_state.action_event)  # type: ignore
     run_state.call_result = run_state.call_result or await call_system_function(
