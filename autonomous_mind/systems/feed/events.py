@@ -15,8 +15,8 @@ from autonomous_mind.helpers import (
     format_timestamp,
     from_yaml_str,
     load_yaml,
-    timestamp_to_filename,
 )
+from autonomous_mind.systems.helpers import save_items
 from autonomous_mind.text import dedent_and_strip
 
 
@@ -126,21 +126,9 @@ class CallResultEvent:
 
 Event = FunctionCallEvent | CallResultEvent
 
-
 def save_events(events: list[Event]) -> Literal[True]:
     """Save the events to disk."""
-
-    def save_event(event: Event) -> None:
-        """Save an event to disk."""
-        event_str = repr(event)
-        event_file = (
-            config.EVENTS_DIRECTORY / f"{timestamp_to_filename(event.timestamp)}.yaml"
-        )
-        event_file.write_text(event_str, encoding="utf-8")
-
-    for event in events:
-        save_event(event)
-    return True
+    return save_items(events, config.EVENTS_DIRECTORY)
 
 
 @lru_cache(maxsize=None)

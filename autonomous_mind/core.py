@@ -6,12 +6,12 @@ IMPORTANT NOTE: this contains the core functionality for the autonomous Mind. In
 
 import asyncio
 from dataclasses import dataclass
-from functools import cached_property, lru_cache
+from functools import cached_property
 import os
 from pathlib import Path
 from textwrap import indent
-from typing import Any, Callable, Literal, Mapping, MutableMapping, Self, Sequence
-from uuid import UUID, uuid4 as new_uuid
+from typing import Any, Callable, Literal, Mapping, MutableMapping, Sequence
+from uuid import uuid4 as new_uuid
 
 from colorama import Fore
 from langchain_core.messages import HumanMessage, SystemMessage
@@ -20,14 +20,12 @@ import toml
 from autonomous_mind import config
 from autonomous_mind.models import format_messages, query_model
 from autonomous_mind.schema import Goal
-from autonomous_mind.systems.feed.events import CallResultEvent, Event, Feed, FunctionCallEvent, read_event, save_events
+from autonomous_mind.systems.feed.events import CallResultEvent, Event, Feed, FunctionCallEvent, save_events
 from autonomous_mind.text import ExtractionError, dedent_and_strip, extract_and_unpack
 from autonomous_mind.helpers import (
     LONG_STR_YAML,
     Timestamp,
     as_yaml_str,
-    count_tokens,
-    format_timestamp,
     get_timestamp,
     from_yaml_str,
     load_yaml,
