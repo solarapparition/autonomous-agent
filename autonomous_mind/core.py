@@ -6,12 +6,12 @@ IMPORTANT NOTE: this contains the core functionality for the autonomous Mind. In
 
 import asyncio
 from dataclasses import dataclass
-from functools import cached_property
+from functools import cached_property, lru_cache
 import os
 from pathlib import Path
 from textwrap import indent
 from typing import Any, Callable, Literal, Mapping, MutableMapping, Sequence
-from uuid import uuid4 as new_uuid
+from uuid import UUID, uuid4 as new_uuid
 
 from colorama import Fore
 from langchain_core.messages import HumanMessage, SystemMessage
@@ -19,8 +19,8 @@ import toml
 
 from autonomous_mind import config
 from autonomous_mind.models import format_messages, query_model
-from autonomous_mind.schema import Goal
-from autonomous_mind.systems.feed.events import CallResultEvent, Event, Feed, FunctionCallEvent, save_events
+from autonomous_mind.schema import CallResultEvent, Event, FunctionCallEvent, Goal
+from autonomous_mind.systems.feed.events import Feed, save_events
 from autonomous_mind.text import ExtractionError, dedent_and_strip, extract_and_unpack
 from autonomous_mind.helpers import (
     LONG_STR_YAML,
@@ -436,7 +436,11 @@ def extract_output_sections(output: str) -> tuple[str, str]:
     feed_review = extract_and_unpack(
         output, start_block_type="<feed-review>", end_block_type="</feed-review>"
     )
-    system_function_call = extract_and_unpack(output,start_block_type="<system-function-call>",end_block_type="</system-function-call>")
+    system_function_call = extract_and_unpack(
+        output,
+        start_block_type="<system-function-call>",
+        end_block_type="</system-function-call>",
+    )
     return feed_review, system_function_call
 
 
@@ -482,23 +486,41 @@ async def call_system_function(call_args: Mapping[str, Any]) -> str:
         raise NotImplementedError(
             "TODO: Implement error handling for function calls."
         ) from e
-    breakpoint()
     return call_result
 
+
+@lru_cache(maxsize=None)
+def read_goal(goal_file: Path) -> Goal:
+    """Read a goal from disk."""
+    return Goal.from_mapping(load_yaml(goal_file))
 
 
 @dataclass
 class Goals:
     """Goals for the Mind."""
 
+    goals_directory: Path
+
     @cached_property
-    def focused(self) -> Goal | None:
+    def goals_files(self) -> list[Path]:
+        """Get the timestamps of all goals."""
+        return sorted(list(self.goals_directory.iterdir()))
+
+    @property
+    def focused(self) -> UUID | None:
         """Get the focused goal."""
-        raise NotImplementedError("TODO: Implement focused goal.")
+        focused_id = config.GLOBAL_STATE.get("focused_goal_id")
+        return UUID(focused_id) if focused_id else None
 
     def format(self) -> str:
         """Get a printable representation of the goals."""
-        raise NotImplementedError("TODO: Implement goals formatting.")
+        if not self.goals_files:
+            return "None"
+        if len(self.goals_files) == 1:
+            goal = read_goal(self.goals_files[0])
+            if goal.id == self.focused:
+                return f"{as_yaml_str([goal.serialize()])}\nFOCUSED_GOAL: {self.focused}"
+        raise NotImplementedError("TODO: Implement goal formatting for other cases.")
 
 
 def update_new_events(
@@ -529,12 +551,12 @@ async def run_mind() -> None:
     """
     action_number = config.GLOBAL_STATE["action_number"]
     completed_actions = action_number - 1
-    goals = Goals()
+    goals = Goals(config.GOALS_DIRECTORY)
     feed = Feed(config.EVENTS_DIRECTORY)
     run_state = RunState(state_file=config.RUN_STATE_FILE)
     run_state.output = run_state.output or await generate_mind_output(
         goals=goals.format(),
-        feed=feed.format(goals.focused.id if goals.focused else None),
+        feed=feed.format(focused_goal=goals.focused),
         completed_actions=completed_actions,
     )
     call_event_batch = feed.call_event_batch()
@@ -566,7 +588,7 @@ async def run_mind() -> None:
     run_state.action_event = run_state.action_event or {
         "id": str(new_uuid()),
         "timestamp": get_timestamp(),
-        "goal_id": str(goals.focused.id) if goals.focused else None,
+        "goal_id": str(goals.focused) if goals.focused else None,
         "content": system_function_call,
     }
     function_call_event = FunctionCallEvent.from_mapping(run_state.action_event)  # type: ignore
@@ -576,7 +598,7 @@ async def run_mind() -> None:
     run_state.call_result_event = run_state.call_result_event or {
         "id": str(new_uuid()),
         "timestamp": get_timestamp(),
-        "goal_id": str(goals.focused.id) if goals.focused else None,
+        "goal_id": str(goals.focused) if goals.focused else None,
         "function_call_id": str(function_call_event.id),
         "content": run_state.call_result,
     }

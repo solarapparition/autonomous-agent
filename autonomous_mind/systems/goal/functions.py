@@ -1,10 +1,12 @@
 """System functions for goal management."""
 
-from uuid import uuid4
+# pylint: disable=line-too-long
 
 from autonomous_mind.helpers import get_timestamp
 from autonomous_mind.schema import Goal
-from autonomous_mind.systems.goal.helpers import save_goal
+from autonomous_mind.systems.config.global_state import set_global_state
+from autonomous_mind.systems.goal.helpers import save_goals
+from autonomous_mind.text import dedent_and_strip
 
 
 def add_goal(summary: str, details: str | None, parent_goal_id: str | None = None, switch_focus: bool = True):
@@ -19,20 +21,17 @@ def add_goal(summary: str, details: str | None, parent_goal_id: str | None = Non
         raise NotImplementedError("TODO: Implement subgoals.")
 
     goal = Goal(
-        id=uuid4(),
         timestamp=get_timestamp(),
         summary=summary,
         details=details,
         parent_goal_id=None,
-        is_focused=switch_focus
     )
-    save_goal(goal)
-
-
-
-    # commit
-    breakpoint()
-    # create a new goal object
-    # save goal object to file
-    # return confirmation message
-    # > add request_system_upgrade
+    save_goals([goal])
+    set_global_state("focused_goal_id", str(goal.id))
+    confirmation = f"""
+    - GOAL added:
+        id: {goal.id}
+        summary: {goal.summary}
+    - Switched focus to GOAL {goal.id} from {parent_goal_id}
+    """
+    return dedent_and_strip(confirmation)

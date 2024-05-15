@@ -5,7 +5,7 @@ from pathlib import Path
 from langchain_anthropic import ChatAnthropic
 # from langchain_openai import ChatOpenAI
 
-from autonomous_mind.helpers import load_yaml
+from autonomous_mind.helpers import as_yaml_str, load_yaml
 
 CONFIG_FILE = Path("data/config.yaml")
 CONFIG_DATA = load_yaml(CONFIG_FILE)
@@ -18,6 +18,8 @@ SOURCE_DIRECTORY = Path(__file__).parent.parent
 BUILD_CONFIG_FILE = Path("pyproject.toml")
 EVENTS_DIRECTORY = Path("data/events")
 EVENTS_DIRECTORY.mkdir(parents=True, exist_ok=True)
+GOALS_DIRECTORY = Path("data/goals")
+GOALS_DIRECTORY.mkdir(parents=True, exist_ok=True)
 
 NAME = CONFIG_DATA["name"]
 ID = CONFIG_DATA["id"]

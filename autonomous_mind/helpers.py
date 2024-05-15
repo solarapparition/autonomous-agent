@@ -58,23 +58,6 @@ def as_yaml_str(
     return stream.getvalue().strip()
 
 
-# def get_timestamp() -> Timestamp:
-#     """Get the current timestamp in UTC."""
-#     return Timestamp(time.strftime("%Y-%m-%d %H:%M:%S", time.gmtime()) + "Z")
-
-
-# def timestamp_to_filename(timestamp: Timestamp) -> TimestampFilename:
-#     """Convert a timestamp to a filename."""
-#     return TimestampFilename(timestamp.replace(":", "-").replace(" ", "_"))
-
-
-# def filename_to_timestamp_final(filename: TimestampFilename) -> Timestamp:
-#     """Convert a filename to a timestamp."""
-#     date_part, time_part = filename.split("_")
-#     time_part = time_part.replace("-", ":")
-#     return Timestamp(f"{date_part} {time_part}")
-
-
 def get_timestamp() -> Timestamp:
     """Get the current timestamp in UTC with microseconds."""
     return Timestamp(f"{datetime.datetime.now(tz=None).isoformat()}Z")
