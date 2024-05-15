@@ -31,3 +31,4 @@ CORE_MODEL = ChatAnthropic(  # type: ignore
 DEVELOPER = CONFIG_DATA["developer"]
 SELF_DESCRIPTION = str(CONFIG_DATA["self_description"]).format(agent_name=NAME)
 COMPUTE_RATE = str(CONFIG_DATA["compute_rate"]).format(agent_name=NAME)
+MAX_RECENT_FEED_TOKENS = CONFIG_DATA["feed"]["max_recent_tokens"]

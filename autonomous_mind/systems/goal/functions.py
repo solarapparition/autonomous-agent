@@ -1,7 +1,10 @@
 """System functions for goal management."""
 
-from dataclasses import dataclass
-from uuid import UUID
+from uuid import uuid4
+
+from autonomous_mind.helpers import get_timestamp
+from autonomous_mind.schema import Goal
+from autonomous_mind.systems.goal.helpers import save_goal
 
 
 def add_goal(summary: str, details: str | None, parent_goal_id: str | None = None, switch_focus: bool = True):
@@ -14,24 +17,21 @@ def add_goal(summary: str, details: str | None, parent_goal_id: str | None = Non
     """
     if parent_goal_id:
         raise NotImplementedError("TODO: Implement subgoals.")
-    
-    
 
-
+    goal = Goal(
+        id=uuid4(),
+        timestamp=get_timestamp(),
+        summary=summary,
+        details=details,
+        parent_goal_id=None,
+        is_focused=switch_focus
+    )
+    save_goal(goal)
 
 
 
     # commit
     breakpoint()
-    @dataclass
-    class Goal:
-        """A goal for the Mind."""
-        id: UUID
-        timestamp: str
-        summary: str
-        details: str | None
-        parent_goal_id: UUID | None
-        is_focused: bool
     # create a new goal object
     # save goal object to file
     # return confirmation message
