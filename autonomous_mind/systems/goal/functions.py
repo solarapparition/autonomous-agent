@@ -2,6 +2,7 @@
 
 # pylint: disable=line-too-long
 
+from uuid import UUID
 from autonomous_mind.helpers import get_timestamp
 from autonomous_mind.schema import Goal
 from autonomous_mind.systems.config.global_state import set_global_state
@@ -17,14 +18,11 @@ def add_goal(summary: str, details: str | None, parent_goal_id: str | None = Non
     If parent_goal_id is provided, the goal will be a subgoal of the parent goal with that id; otherwise, it will be a root-level goal.
     If `switch_focus` is True, then the new goal will automatically become the FOCUSED goal.
     """
-    if parent_goal_id:
-        raise NotImplementedError("TODO: Implement subgoals.")
-
     goal = Goal(
         timestamp=get_timestamp(),
         summary=summary,
         details=details,
-        parent_goal_id=None,
+        parent_goal_id=UUID(parent_goal_id) if parent_goal_id else None,
     )
     save_goals([goal])
     set_global_state("focused_goal_id", str(goal.id))

@@ -92,7 +92,7 @@ Pinned nodes will not be automatically removed.
 </knowledge-subsection>
 
 ### LOADED_KNOWLEDGE_NODES
-Loaded KNOWLEDGE_NODES that are not pinned. These will be removed as needed when the maximum token count for the section is exceeded..
+Loaded KNOWLEDGE_NODES that are not pinned. These will be removed as needed when the maximum token count for the section is exceeded.
 <knowledge-subsection="loaded-nodes">
 None
 </knowledge-subsection>
@@ -166,7 +166,8 @@ Allows searching through knowledge of GOALS, EVENTS, FACTS, TOOLS, and AGENTS.
 
 ### CONFIG_SYSTEM
 Manages {mind_name}'s configuration.
-- Model: `{llm_backend}`
+- LLM: `{llm_backend}`
+- LLM Knowledge Cutoff: {llm_knowledge_cutoff}
 - Config File Location: `{config_file_location}`.
 <system-functions system="CONFIG">
 - function: {update_self_description_name}
@@ -177,7 +178,12 @@ Manages {mind_name}'s configuration.
 ### TOOL_SYSTEM
 Contains custom tools that {mind_name} can use.
 <system-functions system="TOOL">
-<!-- SYSTEM is WIP.-->
+- function: request_tool(name: str, description: str):
+  signature: |-
+    def request_tool(name: str, description: str):
+        '''
+        Request a new TOOL to be added to the TOOL_SYSTEM by the DEVELOPER. `description` includes what the tool should do.
+        '''
 </system-functions>
 
 ### ENVIRONMENT_SYSTEM
@@ -188,7 +194,12 @@ Manages the environment in which {mind_name} operates, including the SYSTEMS the
 - Machine Info:
 {machine_info}
 <system-functions system="ENVIRONMENT">
-<!-- SYSTEM is WIP.-->
+- function: request_system_function
+  signature: |-
+    def request_system_function(system: str, function: str, description: str):
+        '''
+        Request a new SYSTEM_FUNCTION to be added to a SYSTEM by the DEVELOPER. `description` includes what the function should do. SYSTEM_FUNCTIONS specifically interact with the SYSTEMS—for more general external tools, use `request_tool`.
+        '''
 </system-functions>
 
 The following message will contain INSTRUCTIONS on producing action inputs to call SYSTEM_FUNCTIONS.
@@ -221,8 +232,8 @@ action_outcome:
 Suggestions for the REASONING_PROCEDURE:
 - Use whatever structure is most comfortable, but it should allow arbitrary nesting levels to enable deep analysis—common choices include YAML, pseudocode, pseudo-XML, JSON, or novel combinations of these. The key is to densely represent meaning and reasoning.
 - Include unique ids for nodes of the tree to allow for references and to jump back and fourth between parts of the process. Freely reference those ids to allow for a complex, interconnected reasoning process.
-- The REASONING_PROCEDURE should synthesize and reference information from all sections above (INFORMATION, GOALS, FEED, KNOWLEDGE, SYSTEM_FUNCTIONS).
-- It may be effective to build up the procedure hierarchically, starting from examining basic facts, to more advanced compositional analysis, similar to writing a procedural script for a program but interpretable by you.
+- The REASONING_PROCEDURE should synthesize and reference information from all sections above (INFORMATION, GOALS, FEED, KNOWLEDGE, SYSTEM_FUNCTIONS), as well as previously defined reasoning nodes. Directly reference sections by name (e.g., "FEED" or "GOALS"), specific items by id, and reasoning nodes by their id.
+- It may be effective to build up the procedure hierarchically, starting from examining basic facts, to more advanced compositional analysis, similar to writing a procedural script for a program but interpretable by you to be output in the <reasoning-output> section below.
 IMPORTANT: The REASONING_PROCEDURE must be output within the following XML tags (but content within the tags can be any format, as mentioned above):
 <reasoning-procedure>
 {reasoning_procedure}
@@ -266,7 +277,8 @@ Make sure to follow all of the above steps and use the indicated tags and format
 """
 
 
-MAX_KNOWLEDGE_TOKENS = 1500
+MAX_KNOWLEDGE_TOKENS = 2000
+LLM_KNOWLEDGE_CUTOFF = "August 2023"
 
 
 async def generate_mind_output(goals: str, feed: str, completed_actions: int) -> str:
@@ -291,6 +303,7 @@ async def generate_mind_output(goals: str, feed: str, completed_actions: int) ->
         machine_info=machine_info,
         mind_id=config.ID,
         llm_backend=config.LLM_BACKEND,
+        llm_knowledge_cutoff=LLM_KNOWLEDGE_CUTOFF,
         compute_rate=config.COMPUTE_RATE,
         current_time=current_time,
         completed_actions=completed_actions,
@@ -495,6 +508,38 @@ def read_goal(goal_file: Path) -> Goal:
     return Goal.from_mapping(load_yaml(goal_file))
 
 
+def find_last_descendant_index(new_list: list[Goal], parent_id: UUID) -> int:
+    """Find the last descendant index of a parent goal."""
+    last_index = -1
+    for i, goal in enumerate(new_list):
+        if goal.parent_goal_id == parent_id:
+            last_index = max(last_index, i)
+            child_last_index = find_last_descendant_index(new_list, goal.id)
+            last_index = max(last_index, child_last_index)
+        elif goal.id == parent_id and last_index < i:
+            last_index = i
+    return last_index
+
+
+def reorder_goals(old_list: list[Goal]) -> tuple[list[Goal], list[Goal]]:
+    """Reorder goals to be in parent-child order."""
+    new_list: list[Goal] = []
+    orphaned: list[Goal] = []
+
+    for goal in old_list:
+        if goal.parent_goal_id is None:
+            new_list.append(goal)
+        else:
+            parent_exists = any(parent.id == goal.parent_goal_id for parent in new_list)
+            if parent_exists:
+                parent_index = find_last_descendant_index(new_list, goal.parent_goal_id)
+                new_list.insert(parent_index + 1, goal)
+            else:
+                orphaned.append(goal)
+
+    return new_list, orphaned
+
+
 @dataclass
 class Goals:
     """Goals for the Mind."""
@@ -519,7 +564,17 @@ class Goals:
         if len(self.goals_files) == 1:
             goal = read_goal(self.goals_files[0])
             if goal.id == self.focused:
-                return f"{as_yaml_str([goal.serialize()])}\nFOCUSED_GOAL: {self.focused}"
+                return (
+                    f"{as_yaml_str([goal.serialize()])}\nFOCUSED_GOAL: {self.focused}"
+                )
+        
+        breakpoint()
+        goals = [read_goal(goal_file) for goal_file in self.goals_files]
+        ordered_goals, orphaned_goals = reorder_goals(goals)
+        
+
+
+        breakpoint()
         raise NotImplementedError("TODO: Implement goal formatting for other cases.")
 
 
@@ -606,13 +661,12 @@ async def run_mind() -> None:
     call_result_event = CallResultEvent.from_mapping(run_state.call_result_event)  # type: ignore
     new_events = [function_call_event, call_result_event]
     run_state.events_saved = run_state.events_saved or save_events(new_events)
+    raise NotImplementedError("TODO: Increment action number.")
     run_state.archive()
 
 
-# > "TODO: Implement replacement of update_self_description_name and update_self_discription_signature."# > condition check for when new events exceed recommended token count
-# > use async function sigs to indicate to Mind that it won't return immediately
-# > any unrecoverable issues requiring developer intervention needs to be saved as event as well
-# > goals need to have motivation
+# > send message > introduce self and ask if they want to hear my suggestions > keep message list with each agent > message event should be a notification
+# ....
 
 
 asyncio.run(run_mind())
