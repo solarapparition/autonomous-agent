@@ -94,5 +94,4 @@ def get_machine_info() -> dict[str, str]:
         "system": platform.system(),
         "release": platform.release(),
         "machine": platform.machine(),
-        "processor": platform.processor(),
     }

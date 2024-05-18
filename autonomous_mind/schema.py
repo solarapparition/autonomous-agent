@@ -22,7 +22,7 @@ class FunctionCallEvent:
     goal_id: UUID | None
     "Id of the goal this action is related to."
     summary: str
-    content: Mapping[str, Any]
+    content: str
     id: UUID = field(default_factory=uuid4)
     timestamp: Timestamp = field(default_factory=get_timestamp)
     success: Literal[-1, 0, 1] = 0
@@ -52,7 +52,7 @@ class FunctionCallEvent:
         success: {success}
         """
         summary = indent(self.summary, "  ")
-        content = indent(as_yaml_str(self.content), "  ")
+        content = indent(self.content, "  ")
         return dedent_and_strip(template).format(
             id=self.id,
             goal_id=self.goal_id or "!!null",

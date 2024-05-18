@@ -34,7 +34,7 @@ class Goals:
             goal = read_goal(self.goals_files[0])
             if goal.id == self.focused:
                 return (
-                    f"{as_yaml_str([goal.serialize()])}\n# FOCUSED_GOAL: {self.focused}"
+                    f"{as_yaml_str([goal.serialize()])}"
                 )
         goals = [read_goal(goal_file) for goal_file in self.goals_files]
         ordered_goals, orphaned_goals = reorder_goals(goals)
@@ -42,10 +42,12 @@ class Goals:
             raise NotImplementedError("TODO: Implement handling for orphaned goals.")
         if len(goals) == 3:
             breakpoint()  # examine ordered_goals to see if it's correct
+        if len(ordered_goals) > 10:
+            raise NotImplementedError("TODO: Implement handling for more than 10 goals.")
         return "\n".join(
             [
                 (
-                    full_itemized_repr(goal) + "\n# FOCUSED_GOAL: " + str(self.focused)
+                    full_itemized_repr(goal)
                     if goal.id == self.focused
                     else short_itemized_repr(goal)
                 )

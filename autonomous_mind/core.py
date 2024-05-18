@@ -6,7 +6,7 @@ IMPORTANT NOTE: this contains the core functionality for the autonomous Mind. In
 
 import asyncio
 from dataclasses import dataclass
-from functools import cached_property, lru_cache
+from functools import cached_property
 import os
 from pathlib import Path
 from textwrap import indent
@@ -19,8 +19,7 @@ import toml
 
 from autonomous_mind import config
 from autonomous_mind.models import format_messages, query_model
-from autonomous_mind.printout import full_itemized_repr, short_itemized_repr
-from autonomous_mind.schema import CallResultEvent, Event, FunctionCallEvent, Goal
+from autonomous_mind.schema import CallResultEvent, Event, FunctionCallEvent
 from autonomous_mind.systems.feed.events import Feed, save_events
 from autonomous_mind.systems.goal.goals import Goals
 from autonomous_mind.text import ExtractionError, dedent_and_strip, extract_and_unpack
@@ -37,6 +36,7 @@ from autonomous_mind.helpers import (
 )
 from autonomous_mind.systems.config import functions as config_functions
 from autonomous_mind.systems.goal import functions as goal_functions
+from autonomous_mind.systems.knowledge import functions as knowledge_functions
 
 
 def get_python_version() -> str:
@@ -71,7 +71,9 @@ This is {mind_name}'s self-description.
 It can be edited using the appropriate CONFIG_SYSTEM FUNCTION.
 
 ## GOALS
-This section contains {mind_name}'s current goals. The goal that is FOCUSED is the one that {mind_name} is actively working on. Parent goals of the FOCUSED goal will have SUBGOAL_FOCUSED. Other, unrelated goals will have INACTIVE marked.
+This section contains {mind_name}'s current goals. The goal that is FOCUSED is the one that {mind_name} is actively working on.
+A parent of a goal is a goal that the goal is a subgoal of. The chain of parent goals of a goal provides context for the purpose of the goal.
+Parent goals of the FOCUSED goal will have SUBGOAL_FOCUSED.
 <goals>
 {goals}
 </goals>
@@ -209,6 +211,9 @@ The following message will contain INSTRUCTIONS on producing action inputs to ca
 
 INSTRUCTIONS = """
 ## INSTRUCTIONS
+Your current FOCUSED_GOAL is: {focused_goal}.
+Refer to the GOALS section for more context on this goal and its parents.
+
 Remember that you are in the role of {mind_name}. Go through the following steps to determine the action input to call SYSTEM_FUNCTIONS.
 
 1. Review the FEED for what has happened since the last action you've taken, by outputting a YAML with the following structure, enclosed in tags. Follow the instructions in comments, but don't output the comments:
@@ -283,7 +288,9 @@ MAX_KNOWLEDGE_TOKENS = 2000
 LLM_KNOWLEDGE_CUTOFF = "August 2023"
 
 
-async def generate_mind_output(goals: str, feed: str, completed_actions: int) -> str:
+async def generate_mind_output(
+    goals: str, feed: str, completed_actions: int, focused_goal_id: UUID | None
+) -> str:
     """Generate output from Mind."""
     current_time = get_timestamp()
     python_version = get_python_version()
@@ -318,7 +325,9 @@ async def generate_mind_output(goals: str, feed: str, completed_actions: int) ->
         update_self_description_name=update_self_description_name,
         update_self_description_signature=update_self_description_signature,
     )
-    instructions = dedent_and_strip(INSTRUCTIONS)
+    instructions = dedent_and_strip(INSTRUCTIONS).replace(
+        "{focused_goal}", str(focused_goal_id)
+    )
     messages = [
         SystemMessage(content=context),
         HumanMessage(content=instructions),
@@ -445,6 +454,16 @@ class RunState:
         """Set the events updated to state."""
         self.set_and_save("events_updated", value)
 
+    @property
+    def action_number_incremented(self) -> bool | None:
+        """Get the action number incremented from state."""
+        return self.state.get("action_number_incremented")
+
+    @action_number_incremented.setter
+    def action_number_incremented(self, value: bool) -> None:
+        """Set the action number incremented to state."""
+        self.set_and_save("action_number_incremented", value)
+
 
 def extract_output_sections(output: str) -> tuple[str, str]:
     """Extract required info from the output."""
@@ -480,15 +499,25 @@ def extract_output(
 
 async def call_system_function(call_args: Mapping[str, Any]) -> str:
     """Call a system function."""
-    system_mapping = {"CONFIG": config_functions, "GOAL": goal_functions}
-    system = system_mapping.get(call_args["system"])
+    system_mapping = {
+        "CONFIG": config_functions,
+        "GOAL": goal_functions,
+        "KNOWLEDGE": knowledge_functions,
+    }
+    system_name = call_args["system"]
+    function_name = call_args["function"]
+    system = system_mapping.get(system_name)
     if not system:
-        raise NotImplementedError(f"TODO: Implement {call_args['system']} system.")
+        raise NotImplementedError(f"TODO: Implement {system_name} system.")
 
-    call: Callable[..., Any] | None = getattr(system, call_args["function"], None)
+    # temporary missing function handling
+    if system is knowledge_functions and function_name not in {"save_knowledge_node"}:
+        return f"Function {function_name} is not a valid function for the KNOWLEDGE system. Please see the SYSTEM_FUNCTIONS section for available functions."
+
+    call: Callable[..., Any] | None = getattr(system, function_name, None)
     if not call:
         raise NotImplementedError(
-            f"TODO: Implement {call_args['system']}.{call_args['function']} function."
+            f"TODO: Implement {system_name}.{function_name} function."
         )
     try:
         call_result = call(**call_args["arguments"])
@@ -525,6 +554,12 @@ def update_new_events(
     return save_events([last_function_call, *events_since_call])
 
 
+def increment_action_number() -> Literal[True]:
+    """Increment the action number."""
+    config.GLOBAL_STATE["action_number"] += 1
+    save_yaml(config.GLOBAL_STATE, config.GLOBAL_STATE_FILE)
+
+
 async def run_mind() -> None:
     """
     Run the autonomous Mind for one round.
@@ -539,6 +574,7 @@ async def run_mind() -> None:
         goals=goals.format(),
         feed=feed.format(focused_goal=goals.focused),
         completed_actions=completed_actions,
+        focused_goal_id=goals.focused,
     )
     call_event_batch = feed.call_event_batch()
     if completed_actions:
@@ -587,8 +623,11 @@ async def run_mind() -> None:
     call_result_event = CallResultEvent.from_mapping(run_state.call_result_event)  # type: ignore
     new_events = [function_call_event, call_result_event]
     run_state.events_saved = run_state.events_saved or save_events(new_events)
-    raise NotImplementedError("TODO: Increment action number.")
+    run_state.action_number_incremented = (
+        run_state.action_number_incremented or increment_action_number()
+    )
     run_state.archive()
+    print("Mind run complete.")
 
 
 # > send message > introduce self and ask if they want to hear my suggestions > keep message list with each agent > message event should be a notification
