@@ -22,6 +22,7 @@ from autonomous_mind.models import format_messages, query_model
 from autonomous_mind.printout import full_itemized_repr, short_itemized_repr
 from autonomous_mind.schema import CallResultEvent, Event, FunctionCallEvent, Goal
 from autonomous_mind.systems.feed.events import Feed, save_events
+from autonomous_mind.systems.goal.goals import Goals
 from autonomous_mind.text import ExtractionError, dedent_and_strip, extract_and_unpack
 from autonomous_mind.helpers import (
     LONG_STR_YAML,
@@ -501,89 +502,6 @@ async def call_system_function(call_args: Mapping[str, Any]) -> str:
             "TODO: Implement error handling for function calls."
         ) from e
     return call_result
-
-
-@lru_cache(maxsize=None)
-def read_goal(goal_file: Path) -> Goal:
-    """Read a goal from disk."""
-    return Goal.from_mapping(load_yaml(goal_file))
-
-
-def find_last_descendant_index(new_list: list[Goal], parent_id: UUID) -> int:
-    """Find the last descendant index of a parent goal."""
-    last_index = -1
-    for i, goal in enumerate(new_list):
-        if goal.parent_goal_id == parent_id:
-            last_index = max(last_index, i)
-            child_last_index = find_last_descendant_index(new_list, goal.id)
-            last_index = max(last_index, child_last_index)
-        elif goal.id == parent_id and last_index < i:
-            last_index = i
-    return last_index
-
-
-def reorder_goals(old_list: list[Goal]) -> tuple[list[Goal], list[Goal]]:
-    """Reorder goals to be in parent-child order."""
-    new_list: list[Goal] = []
-    orphaned: list[Goal] = []
-
-    for goal in old_list:
-        if goal.parent_goal_id is None:
-            new_list.append(goal)
-        else:
-            parent_exists = any(parent.id == goal.parent_goal_id for parent in new_list)
-            if parent_exists:
-                parent_index = find_last_descendant_index(new_list, goal.parent_goal_id)
-                new_list.insert(parent_index + 1, goal)
-            else:
-                orphaned.append(goal)
-
-    return new_list, orphaned
-
-
-@dataclass
-class Goals:
-    """Goals for the Mind."""
-
-    goals_directory: Path
-
-    @cached_property
-    def goals_files(self) -> list[Path]:
-        """Get the timestamps of all goals."""
-        return sorted(list(self.goals_directory.iterdir()))
-
-    @property
-    def focused(self) -> UUID | None:
-        """Get the focused goal."""
-        focused_id = config.GLOBAL_STATE.get("focused_goal_id")
-        return UUID(focused_id) if focused_id else None
-
-    def format(self) -> str:
-        """Get a printable representation of the goals."""
-        if not self.goals_files:
-            return "None"
-        if len(self.goals_files) == 1:
-            goal = read_goal(self.goals_files[0])
-            if goal.id == self.focused:
-                return (
-                    f"{as_yaml_str([goal.serialize()])}\n# FOCUSED_GOAL: {self.focused}"
-                )
-        goals = [read_goal(goal_file) for goal_file in self.goals_files]
-        ordered_goals, orphaned_goals = reorder_goals(goals)
-        if orphaned_goals:
-            raise NotImplementedError("TODO: Implement handling for orphaned goals.")
-        if len(goals) == 3:
-            breakpoint()  # examine ordered_goals to see if it's correct
-        return "\n".join(
-            [
-                (
-                    full_itemized_repr(goal) + "\n# FOCUSED_GOAL: " + str(self.focused)
-                    if goal.id == self.focused
-                    else short_itemized_repr(goal)
-                )
-                for goal in ordered_goals
-            ]
-        )
 
 
 def update_new_events(
