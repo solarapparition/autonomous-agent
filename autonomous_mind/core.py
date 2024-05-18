@@ -19,6 +19,7 @@ import toml
 
 from autonomous_mind import config
 from autonomous_mind.models import format_messages, query_model
+from autonomous_mind.printout import full_itemized_repr, short_itemized_repr
 from autonomous_mind.schema import CallResultEvent, Event, FunctionCallEvent, Goal
 from autonomous_mind.systems.feed.events import Feed, save_events
 from autonomous_mind.text import ExtractionError, dedent_and_strip, extract_and_unpack
@@ -565,17 +566,24 @@ class Goals:
             goal = read_goal(self.goals_files[0])
             if goal.id == self.focused:
                 return (
-                    f"{as_yaml_str([goal.serialize()])}\nFOCUSED_GOAL: {self.focused}"
+                    f"{as_yaml_str([goal.serialize()])}\n# FOCUSED_GOAL: {self.focused}"
                 )
-        
-        breakpoint()
         goals = [read_goal(goal_file) for goal_file in self.goals_files]
         ordered_goals, orphaned_goals = reorder_goals(goals)
-        
-
-
-        breakpoint()
-        raise NotImplementedError("TODO: Implement goal formatting for other cases.")
+        if orphaned_goals:
+            raise NotImplementedError("TODO: Implement handling for orphaned goals.")
+        if len(goals) == 3:
+            breakpoint()  # examine ordered_goals to see if it's correct
+        return "\n".join(
+            [
+                (
+                    full_itemized_repr(goal) + "\n# FOCUSED_GOAL: " + str(self.focused)
+                    if goal.id == self.focused
+                    else short_itemized_repr(goal)
+                )
+                for goal in ordered_goals
+            ]
+        )
 
 
 def update_new_events(

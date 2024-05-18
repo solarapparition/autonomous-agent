@@ -7,13 +7,9 @@ from typing import Literal, Sequence
 from uuid import UUID
 
 from autonomous_mind import config
-from autonomous_mind.helpers import (
-    as_yaml_str,
-    count_tokens,
-    from_yaml_str,
-    load_yaml,
-)
-from autonomous_mind.schema import CallResultEvent, Event, FunctionCallEvent, Item
+from autonomous_mind.helpers import count_tokens, load_yaml
+from autonomous_mind.printout import full_itemized_repr, short_itemized_repr
+from autonomous_mind.schema import CallResultEvent, Event, FunctionCallEvent
 from autonomous_mind.systems.helpers import save_items
 
 
@@ -31,16 +27,6 @@ def read_event(event_file: Path) -> Event:
         "call_result": CallResultEvent,
     }
     return type_mapping[event_dict["type"]].from_mapping(event_dict)
-
-
-def full_itemized_repr(item: Item) -> str:
-    """Give full representation of event as an item."""
-    return as_yaml_str([from_yaml_str(repr(item))])
-
-
-def short_itemized_repr(item: Item) -> str:
-    """Give short representation of an item."""
-    return as_yaml_str([from_yaml_str(str(item))])
 
 
 @dataclass
