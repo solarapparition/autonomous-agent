@@ -36,7 +36,8 @@ from autonomous_mind.helpers import (
 )
 from autonomous_mind.systems.config import functions as config_functions
 from autonomous_mind.systems.goal import functions as goal_functions
-from autonomous_mind.systems.knowledge import functions as knowledge_functions
+from autonomous_mind.systems.memory import functions as memory_functions
+from autonomous_mind.systems.agents import functions as agent_functions
 
 
 def get_python_version() -> str:
@@ -79,12 +80,12 @@ Parent goals of the FOCUSED goal will have SUBGOAL_FOCUSED.
 </goals>
 These goals are autonomously determined by {mind_name}, and can be interacted with through the GOALS_SYSTEM_FUNCTION.
 
-## KNOWLEDGE
-This section contains {mind_name}'s KNOWLEDGE_NODES that have been loaded. KNOWLEDGE NODES are chunks of information that {mind_name} has automatically or manually learned. Any data in the SYSTEM that has an `id` can become a KNOWLEDGE_NODE.
+## MEMORY
+This section contains {mind_name}'s MEMORY_NODES that have been loaded. MEMORY_NODES are chunks of information that {mind_name} has automatically or manually learned. Any data in the SYSTEM that has an `id` can become a MEMORY_NODE.
 
-### PINNED_KNOWLEDGE_NODES
+### PINNED_MEMORY_NODES
 Pinned nodes will not be automatically removed.
-<knowledge-subsection="pinned-nodes">
+<memory-subsection="pinned-nodes">
 - type: agent_info
   content: |-
     id: 25b9a536-54d0-4162-bae9-ec81dba993e9
@@ -93,14 +94,14 @@ Pinned nodes will not be automatically removed.
   pin_timestamp: 2024-05-08 14:21:46Z
   context: |-
     pinning this fyi, since you're stuck with having to talk to me for awhile. once we've got you fully autonomous you can unpin this, if you want to --solar
-</knowledge-subsection>
+</memory-subsection>
 
-### LOADED_KNOWLEDGE_NODES
-Loaded KNOWLEDGE_NODES that are not pinned. These will be removed as needed when the maximum token count for the section is exceeded.
-<knowledge-subsection="loaded-nodes">
+### LOADED_MEMORY_NODES
+Loaded MEMORY_NODES that are not pinned. These will be removed as needed when the maximum token count for the section is exceeded.
+<memory-subsection="loaded-nodes">
 None
-</knowledge-subsection>
-KNOWLEDGE_NODES are can be interacted with through FUNCTIONS for that SYSTEM.
+</memory-subsection>
+MEMORY_NODES are can be interacted with through FUNCTIONS for that SYSTEM.
 
 ## FEED
 This section contains external events as well as calls that {mind_name} has sent to the SYSTEM_FUNCTIONS. There are 2 main FEED item types in the feed:
@@ -120,7 +121,7 @@ Handles communication with AGENTS—entities capable of acting on their own.
 <system-functions system="AGENTS">
 - function: message_agent
   signature: |-
-    def message_agent(id: str, message: str):
+    async def message_agent(id: str, message: str):
         '''Send a message to an AGENT with the given `id`.'''
 - function: list_agents
   signature: |-
@@ -153,18 +154,18 @@ Manages the FEED of events and actions.
 <!-- SYSTEM is WIP.-->
 </system-functions>
 
-### KNOWLEDGE_SYSTEM
-Allows searching through knowledge of GOALS, EVENTS, FACTS, TOOLS, and AGENTS.
-- Max Knowledge Tokens: {max_knowledge_tokens}
-<system-functions system="KNOWLEDGE">
-- function: save_knowledge_node
+### MEMORY_SYSTEM
+Allows searching through memory of GOALS, EVENTS, FACTS, TOOLS, and AGENTS.
+- Max Memory Tokens: {max_memory_tokens}
+<system-functions system="MEMORY">
+- function: save_memory_node
   signature: |-
-    def save_knowledge_node(content: str, context: str, summary: str, load_to_knowledge: bool = True):
+    def save_memory_node(content: str, context: str, summary: str, load_to_memory: bool = True):
         '''
-        Save a new KNOWLEDGE_NODE with the given `content`.
+        Save a new MEMORY_NODE with the given `content`.
         `context` adds context that might not be obvious from just the `content`.
         `summary` should be no more than a sentence.
-        `load_to_knowledge` determines whether the node should be immediately loaded into the KNOWLEDGE or not.
+        `load_to_memory` determines whether the node should be immediately loaded into the MEMORY section or not.
         '''
 </system-functions>
 
@@ -204,6 +205,10 @@ Manages the environment in which {mind_name} operates, including the SYSTEMS the
         '''
         Request a new SYSTEM_FUNCTION to be added to a SYSTEM by the DEVELOPER. `description` includes what the function should do. SYSTEM_FUNCTIONS specifically interact with the SYSTEMS—for more general external tools, use `request_tool`.
         '''
+- function: sleep
+  signature: |-
+    def sleep(mode: Literal["until", "for"], time: str | int):
+        '''Put {mind_name} to sleep until a specific UTC timestamp or for a specific duration in seconds.'''
 </system-functions>
 
 The following message will contain INSTRUCTIONS on producing action inputs to call SYSTEM_FUNCTIONS.
@@ -237,9 +242,9 @@ action_outcome:
 
 2. Create a REASONING_PROCEDURE. The REASONING_PROCEDURE is a nested tree structure that provides abstract procedural reasoning that, when executed, processes the raw information presented above and outputs a decision or action.
 Suggestions for the REASONING_PROCEDURE:
-- Use whatever structure is most comfortable, but it should allow arbitrary nesting levels to enable deep analysis—common choices include YAML, pseudocode, pseudo-XML, JSON, or novel combinations of these. The key is to densely represent meaning and reasoning.
+- Use whatever structure is most comfortable, but it should allow arbitrary nesting levels to enable deep analysis—common choices include YAML, pseudocode, Mermaid, pseudo-XML, JSON, or novel combinations of these. The key is to densely represent meaning and reasoning.
 - Include unique ids for nodes of the tree to allow for references and to jump back and fourth between parts of the process. Freely reference those ids to allow for a complex, interconnected reasoning process.
-- The REASONING_PROCEDURE should synthesize and reference information from all sections above (INFORMATION, GOALS, FEED, KNOWLEDGE, SYSTEM_FUNCTIONS), as well as previously defined reasoning nodes. Directly reference sections by name (e.g., "FEED" or "GOALS"), specific items by id, and reasoning nodes by their id.
+- The REASONING_PROCEDURE should synthesize and reference information from all sections above (INFORMATION, GOALS, FEED, MEMORY, SYSTEM_FUNCTIONS), as well as previously defined reasoning nodes. Directly reference sections by name (e.g., "FEED" or "GOALS"), specific items by id, and reasoning nodes by their id.
 - It may be effective to build up the procedure hierarchically, starting from examining basic facts, to more advanced compositional analysis, similar to writing a procedural script for a program but interpretable by you to be output in the <reasoning-output> section below.
 IMPORTANT: The REASONING_PROCEDURE must be output within the following XML tags (but content within the tags can be any format, as mentioned above):
 <reasoning-procedure>
@@ -284,7 +289,7 @@ Make sure to follow all of the above steps and use the indicated tags and format
 """
 
 
-MAX_KNOWLEDGE_TOKENS = 2000
+MAX_MEMORY_TOKENS = 2000
 LLM_KNOWLEDGE_CUTOFF = "August 2023"
 
 
@@ -321,7 +326,7 @@ async def generate_mind_output(
         goals=goals,
         feed=feed,
         max_feed_tokens=config.MAX_RECENT_FEED_TOKENS,
-        max_knowledge_tokens=MAX_KNOWLEDGE_TOKENS,
+        max_knowledge_tokens=MAX_MEMORY_TOKENS,
         update_self_description_name=update_self_description_name,
         update_self_description_signature=update_self_description_signature,
     )
@@ -502,7 +507,8 @@ async def call_system_function(call_args: Mapping[str, Any]) -> str:
     system_mapping = {
         "CONFIG": config_functions,
         "GOAL": goal_functions,
-        "KNOWLEDGE": knowledge_functions,
+        "MEMORY": memory_functions,
+        "AGENTS": agent_functions,
     }
     system_name = call_args["system"]
     function_name = call_args["function"]
@@ -511,8 +517,8 @@ async def call_system_function(call_args: Mapping[str, Any]) -> str:
         raise NotImplementedError(f"TODO: Implement {system_name} system.")
 
     # temporary missing function handling
-    if system is knowledge_functions and function_name not in {"save_knowledge_node"}:
-        return f"Function {function_name} is not a valid function for the KNOWLEDGE system. Please see the SYSTEM_FUNCTIONS section for available functions."
+    if system is memory_functions and function_name not in {"save_memory_node"}:
+        return f"Function {function_name} is not a valid function for the MEMORY system. Please see the SYSTEM_FUNCTIONS section for available functions."
 
     call: Callable[..., Any] | None = getattr(system, function_name, None)
     if not call:
@@ -558,6 +564,7 @@ def increment_action_number() -> Literal[True]:
     """Increment the action number."""
     config.GLOBAL_STATE["action_number"] += 1
     save_yaml(config.GLOBAL_STATE, config.GLOBAL_STATE_FILE)
+    return True
 
 
 async def run_mind() -> None:

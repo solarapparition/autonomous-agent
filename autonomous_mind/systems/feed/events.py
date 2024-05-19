@@ -67,6 +67,7 @@ class Feed:
         for file in reversed(self.event_files):
             event = read_event(file)
             # we represent the event differently depending on various conditions
+            raise NotImplementedError("TODO: Implement showing events of parent goal, collapsed.")
             if focused_goal and action_number > 3 and event.goal_id != focused_goal:
                 # hide older events not related to the focused goal
                 continue

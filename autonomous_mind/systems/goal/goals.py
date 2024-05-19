@@ -44,6 +44,9 @@ class Goals:
             breakpoint()  # examine ordered_goals to see if it's correct
         if len(ordered_goals) > 10:
             raise NotImplementedError("TODO: Implement handling for more than 10 goals.")
+            # > show root goals; collapsed
+            # > show full parent chain of focused goal; collapsed
+            # > show focused goal's direct children; collapsed
         return "\n".join(
             [
                 (

@@ -20,6 +20,8 @@ EVENTS_DIRECTORY = Path("data/events")
 EVENTS_DIRECTORY.mkdir(parents=True, exist_ok=True)
 GOALS_DIRECTORY = Path("data/goals")
 GOALS_DIRECTORY.mkdir(parents=True, exist_ok=True)
+AGENTS_DIRECTORY = Path("data/agents")
+AGENTS_DIRECTORY.mkdir(parents=True, exist_ok=True)
 
 NAME = CONFIG_DATA["name"]
 ID = CONFIG_DATA["id"]
