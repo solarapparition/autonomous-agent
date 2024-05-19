@@ -7,11 +7,9 @@ IMPORTANT NOTE: this contains the core functionality for the autonomous Mind. In
 import asyncio
 from dataclasses import dataclass
 from functools import cached_property
-import os
 from pathlib import Path
 from textwrap import indent
 from typing import Any, Callable, Literal, Mapping, MutableMapping, Sequence
-from uuid import UUID, uuid4 as new_uuid
 
 from colorama import Fore
 from langchain_core.messages import HumanMessage, SystemMessage
@@ -19,8 +17,8 @@ import toml
 
 from autonomous_mind import config
 from autonomous_mind.models import format_messages, query_model
-from autonomous_mind.schema import CallResultEvent, Event, FunctionCallEvent
-from autonomous_mind.systems.feed.events import Feed, save_events
+from autonomous_mind.schema import CallResultEvent, Event, FunctionCallEvent, ItemId, generate_id
+from autonomous_mind.systems.feed.events import Feed, read_event, save_events
 from autonomous_mind.systems.goal.goals import Goals
 from autonomous_mind.text import ExtractionError, dedent_and_strip, extract_and_unpack
 from autonomous_mind.helpers import (
@@ -121,8 +119,8 @@ Handles communication with AGENTS—entities capable of acting on their own.
 <system-functions system="AGENTS">
 - function: message_agent
   signature: |-
-    async def message_agent(id: str, message: str):
-        '''Send a message to an AGENT with the given `id`.'''
+    async def message_agent(agent_id: str, message: str):
+        '''Send a message to an AGENT with the given `agent_id`.'''
 - function: list_agents
   signature: |-
     def list_agents():
@@ -294,7 +292,7 @@ LLM_KNOWLEDGE_CUTOFF = "August 2023"
 
 
 async def generate_mind_output(
-    goals: str, feed: str, completed_actions: int, focused_goal_id: UUID | None
+    goals: str, feed: str, completed_actions: int, focused_goal_id: ItemId | None
 ) -> str:
     """Generate output from Mind."""
     current_time = get_timestamp()
@@ -359,7 +357,6 @@ class RunState:
 
     def save(self) -> None:
         """Save the state to disk."""
-        os.makedirs(self.state_file.parent, exist_ok=True)
         save_yaml(self.state, self.state_file, yaml=LONG_STR_YAML)
 
     def set_and_save(self, key: str, value: Any) -> None:
@@ -610,7 +607,7 @@ async def run_mind() -> None:
             last_function_call, events_since_call, feed_review
         )
     run_state.action_event = run_state.action_event or {
-        "id": str(new_uuid()),
+        "id": generate_id(),
         "timestamp": get_timestamp(),
         "goal_id": str(goals.focused) if goals.focused else None,
         "summary": system_function_call["action_intention"],
@@ -621,7 +618,7 @@ async def run_mind() -> None:
         system_function_call
     )
     run_state.call_result_event = run_state.call_result_event or {
-        "id": str(new_uuid()),
+        "id": generate_id(),
         "timestamp": get_timestamp(),
         "goal_id": str(goals.focused) if goals.focused else None,
         "function_call_id": str(function_call_event.id),
@@ -633,6 +630,7 @@ async def run_mind() -> None:
     run_state.action_number_incremented = (
         run_state.action_number_incremented or increment_action_number()
     )
+    read_event.cache_clear()
     run_state.archive()
     print("Mind run complete.")
 

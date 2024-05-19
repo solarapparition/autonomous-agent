@@ -2,8 +2,8 @@
 
 from dataclasses import dataclass, field
 from textwrap import indent
-from typing import Any, Literal, Mapping, MutableMapping, Self
-from uuid import UUID, uuid4
+from typing import Any, Literal, Mapping, MutableMapping, NewType, Self
+from uuid import uuid4
 
 from autonomous_mind.helpers import (
     Timestamp,
@@ -13,34 +13,32 @@ from autonomous_mind.helpers import (
 )
 from autonomous_mind.text import dedent_and_strip
 
+ItemId = NewType("ItemId", str)
+
+def generate_id() -> ItemId:
+    """Generate a unique identifier."""
+    return ItemId(str(uuid4()))
 
 @dataclass
 class FunctionCallEvent:
     """An action event."""
 
-    goal_id: UUID | None
+    goal_id: ItemId | None
     "Id of the goal this action is related to."
     summary: str
     content: str
     type: Literal["function_call"] = "function_call"
-    id: UUID = field(default_factory=uuid4)
+    id: ItemId = field(default_factory=generate_id)
     timestamp: Timestamp = field(default_factory=get_timestamp)
     success: Literal[-1, 0, 1] = 0
 
     @classmethod
     def from_mapping(cls, mapping: MutableMapping[str, Any]) -> Self:
         """Create event from a mapping."""
-        mapping["id"] = UUID(mapping["id"])
-        mapping["goal_id"] = UUID(mapping["goal_id"]) if mapping["goal_id"] else None
+        mapping["id"] = ItemId(mapping["id"])
+        mapping["goal_id"] = ItemId(mapping["goal_id"]) if mapping["goal_id"] else None
         mapping["timestamp"] = format_timestamp(mapping["timestamp"])
         return cls(**mapping)
-        # return cls(
-        #     id=UUID(mapping["id"]),
-        #     goal_id=UUID(mapping["goal_id"]) if mapping["goal_id"] else None,
-        #     timestamp=format_timestamp(mapping["timestamp"]),
-        #     summary=mapping["summary"],
-        #     content=mapping["content"],
-        # )
 
     def __repr__(self) -> str:
         """Get the string representation of the event."""
@@ -93,30 +91,23 @@ class FunctionCallEvent:
 class CallResultEvent:
     """Event for result of calls."""
 
-    goal_id: UUID | None
+    goal_id: ItemId | None
     "Id of the goal this call result is related to."
-    function_call_id: UUID
+    function_call_id: ItemId
     "Id of the function call this result is for."
     content: str
     type: Literal["call_result"] = "call_result"
-    id: UUID = field(default_factory=uuid4)
+    id: ItemId = field(default_factory=generate_id)
     timestamp: Timestamp = field(default_factory=get_timestamp)
     summary: str = ""
 
     @classmethod
     def from_mapping(cls, mapping: MutableMapping[str, Any]) -> Self:
         """Create an event from a mapping."""
-        # return cls(
-        #     id=UUID(mapping["id"]),
-        #     goal_id=UUID(mapping["goal_id"]) if mapping["goal_id"] else None,
-        #     timestamp=format_timestamp(mapping["timestamp"]),
-        #     function_call_id=UUID(mapping["function_call_id"]),
-        #     content=mapping["content"],
-        # )
-        mapping["id"] = UUID(mapping["id"])
-        mapping["goal_id"] = UUID(mapping["goal_id"]) if mapping["goal_id"] else None
+        mapping["id"] = ItemId(mapping["id"])
+        mapping["goal_id"] = ItemId(mapping["goal_id"]) if mapping["goal_id"] else None
         mapping["timestamp"] = format_timestamp(mapping["timestamp"])
-        mapping["function_call_id"] = UUID(mapping["function_call_id"])
+        mapping["function_call_id"] = ItemId(mapping["function_call_id"])
         return cls(**mapping)
 
     def __repr__(self) -> str:
@@ -175,20 +166,20 @@ class Goal:
 
     summary: str
     details: str | None
-    parent_goal_id: UUID | None
-    id: UUID = field(default_factory=uuid4)
+    parent_goal_id: ItemId | None
+    id: ItemId = field(default_factory=generate_id)
     timestamp: Timestamp = field(default_factory=get_timestamp)
 
     @classmethod
     def from_mapping(cls, mapping: Mapping[str, Any]) -> Self:
         """Create a goal from a mapping."""
         return cls(
-            id=UUID(mapping["id"]),
+            id=ItemId(mapping["id"]),
             timestamp=format_timestamp(mapping["timestamp"]),
             summary=mapping["summary"],
             details=mapping["details"],
             parent_goal_id=(
-                UUID(mapping["parent_goal_id"]) if mapping["parent_goal_id"] else None
+                ItemId(mapping["parent_goal_id"]) if mapping["parent_goal_id"] else None
             ),
         )
 

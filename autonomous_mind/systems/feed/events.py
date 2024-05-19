@@ -4,12 +4,11 @@ from dataclasses import dataclass
 from functools import cached_property, lru_cache
 from pathlib import Path
 from typing import Literal, Sequence
-from uuid import UUID
 
 from autonomous_mind import config
 from autonomous_mind.helpers import count_tokens, load_yaml
 from autonomous_mind.printout import full_itemized_repr, short_itemized_repr
-from autonomous_mind.schema import CallResultEvent, Event, FunctionCallEvent
+from autonomous_mind.schema import CallResultEvent, Event, FunctionCallEvent, ItemId
 from autonomous_mind.systems.helpers import save_items
 
 
@@ -58,7 +57,7 @@ class Feed:
         """Get all recent events."""
         return self.call_event_batch(3)
 
-    def format(self, focused_goal: UUID | None) -> str:
+    def format(self, focused_goal: ItemId | None) -> str:
         """Get a printable representation of the feed."""
         # max_semi_recent_tokens = 1000
         recent_events_text = ""
@@ -67,6 +66,7 @@ class Feed:
         for file in reversed(self.event_files):
             event = read_event(file)
             # we represent the event differently depending on various conditions
+            breakpoint()
             raise NotImplementedError("TODO: Implement showing events of parent goal, collapsed.")
             if focused_goal and action_number > 3 and event.goal_id != focused_goal:
                 # hide older events not related to the focused goal

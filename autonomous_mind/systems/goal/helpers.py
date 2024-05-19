@@ -3,10 +3,9 @@
 from functools import lru_cache
 from pathlib import Path
 from typing import Literal, Sequence
-from uuid import UUID
 from autonomous_mind import config
 from autonomous_mind.helpers import load_yaml
-from autonomous_mind.schema import Goal
+from autonomous_mind.schema import Goal, ItemId
 from autonomous_mind.systems.helpers import save_items
 
 
@@ -21,7 +20,7 @@ def read_goal(goal_file: Path) -> Goal:
     return Goal.from_mapping(load_yaml(goal_file))
 
 
-def find_last_descendant_index(new_list: list[Goal], parent_id: UUID) -> int:
+def find_last_descendant_index(new_list: list[Goal], parent_id: ItemId) -> int:
     """Find the last descendant index of a parent goal."""
     last_index = -1
     for i, goal in enumerate(new_list):

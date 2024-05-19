@@ -1,11 +1,11 @@
 from dataclasses import dataclass
 from functools import cached_property
 from pathlib import Path
-from uuid import UUID
 
 from autonomous_mind import config
 from autonomous_mind.helpers import as_yaml_str
 from autonomous_mind.printout import full_itemized_repr, short_itemized_repr
+from autonomous_mind.schema import ItemId
 from autonomous_mind.systems.goal.helpers import read_goal, reorder_goals
 
 
@@ -21,10 +21,10 @@ class Goals:
         return sorted(list(self.goals_directory.iterdir()))
 
     @property
-    def focused(self) -> UUID | None:
+    def focused(self) -> ItemId | None:
         """Get the focused goal."""
         focused_id = config.GLOBAL_STATE.get("focused_goal_id")
-        return UUID(focused_id) if focused_id else None
+        return ItemId(focused_id) if focused_id else None
 
     def format(self) -> str:
         """Get a printable representation of the goals."""
