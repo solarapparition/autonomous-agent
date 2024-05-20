@@ -9,6 +9,7 @@ from autonomous_mind import config
 from autonomous_mind.helpers import count_tokens, load_yaml
 from autonomous_mind.printout import full_itemized_repr, short_itemized_repr
 from autonomous_mind.schema import CallResultEvent, Event, FunctionCallEvent, ItemId
+from autonomous_mind.systems.goal.helpers import read_goal
 from autonomous_mind.systems.helpers import save_items
 
 
@@ -57,7 +58,7 @@ class Feed:
         """Get all recent events."""
         return self.call_event_batch(3)
 
-    def format(self, focused_goal: ItemId | None) -> str:
+    def format(self, focused_goal: ItemId | None, parent_goal_id: ItemId | None) -> str:
         """Get a printable representation of the feed."""
         # max_semi_recent_tokens = 1000
         recent_events_text = ""
@@ -66,10 +67,13 @@ class Feed:
         for file in reversed(self.event_files):
             event = read_event(file)
             # we represent the event differently depending on various conditions
-            breakpoint()
-            raise NotImplementedError("TODO: Implement showing events of parent goal, collapsed.")
-            if focused_goal and action_number > 3 and event.goal_id != focused_goal:
-                # hide older events not related to the focused goal
+            goal_unrelated = (
+                event.goal_id != focused_goal
+                or (parent_goal_id and event.goal_id != parent_goal_id)
+                or (not parent_goal_id and not event.goal_id)
+            )
+            if focused_goal and action_number > 3 and goal_unrelated:
+                # hide older events not related to the focused goal or its parent
                 continue
             if action_number == 1 or (not focused_goal and action_number <= 3):
                 # always show last events in full; also show recent events in full if not focused on specific goal

@@ -34,7 +34,7 @@ async def message_agent(agent_id: str, message: str):
     except MessageSendingError as e:
         return f"Failed to send message to agent {agent_id}. Error: {str(e)}"
     record_message(agent_id, message)
-    return f"Message sent to agent {agent_id}. You will receive a notification in your FEED if the agent responds."
+    return f"SYSTEM: Message sent to agent {agent_id}. You will receive a notification in your FEED if the agent responds."
 
 
 def list_agents():

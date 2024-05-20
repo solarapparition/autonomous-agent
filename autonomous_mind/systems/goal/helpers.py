@@ -20,6 +20,15 @@ def read_goal(goal_file: Path) -> Goal:
     return Goal.from_mapping(load_yaml(goal_file))
 
 
+def find_goal(goal_id: ItemId) -> Goal:
+    """Get the filename for a goal."""
+    return next(
+        goal
+        for goal_file in config.GOALS_DIRECTORY.iterdir()
+        if (goal := read_goal(goal_file)).id == goal_id
+    )
+
+
 def find_last_descendant_index(new_list: list[Goal], parent_id: ItemId) -> int:
     """Find the last descendant index of a parent goal."""
     last_index = -1

@@ -17,9 +17,16 @@ import toml
 
 from autonomous_mind import config
 from autonomous_mind.models import format_messages, query_model
-from autonomous_mind.schema import CallResultEvent, Event, FunctionCallEvent, ItemId, generate_id
+from autonomous_mind.schema import (
+    CallResultEvent,
+    Event,
+    FunctionCallEvent,
+    ItemId,
+    generate_id,
+)
 from autonomous_mind.systems.feed.events import Feed, read_event, save_events
 from autonomous_mind.systems.goal.goals import Goals
+from autonomous_mind.systems.goal.helpers import read_goal
 from autonomous_mind.text import ExtractionError, dedent_and_strip, extract_and_unpack
 from autonomous_mind.helpers import (
     LONG_STR_YAML,
@@ -205,8 +212,8 @@ Manages the environment in which {mind_name} operates, including the SYSTEMS the
         '''
 - function: sleep
   signature: |-
-    def sleep(mode: Literal["until", "for"], time: str | int):
-        '''Put {mind_name} to sleep until a specific UTC timestamp or for a specific duration in seconds.'''
+    def sleep(mode: Literal["until", "hour", "minute", "second"], time: str | int):
+        '''Put {mind_name} to sleep until a specific UTC timestamp or for a specific duration.'''
 </system-functions>
 
 The following message will contain INSTRUCTIONS on producing action inputs to call SYSTEM_FUNCTIONS.
@@ -324,7 +331,7 @@ async def generate_mind_output(
         goals=goals,
         feed=feed,
         max_feed_tokens=config.MAX_RECENT_FEED_TOKENS,
-        max_knowledge_tokens=MAX_MEMORY_TOKENS,
+        max_memory_tokens=MAX_MEMORY_TOKENS,
         update_self_description_name=update_self_description_name,
         update_self_description_signature=update_self_description_signature,
     )
@@ -576,7 +583,9 @@ async def run_mind() -> None:
     run_state = RunState(state_file=config.RUN_STATE_FILE)
     run_state.output = run_state.output or await generate_mind_output(
         goals=goals.format(),
-        feed=feed.format(focused_goal=goals.focused),
+        feed=feed.format(
+            focused_goal=goals.focused, parent_goal_id=goals.focused_parent
+        ),
         completed_actions=completed_actions,
         focused_goal_id=goals.focused,
     )
@@ -631,12 +640,9 @@ async def run_mind() -> None:
         run_state.action_number_incremented or increment_action_number()
     )
     read_event.cache_clear()
+    read_goal.cache_clear()
     run_state.archive()
     print("Mind run complete.")
-
-
-# > send message > introduce self and ask if they want to hear my suggestions > keep message list with each agent > message event should be a notification
-# ....
 
 
 asyncio.run(run_mind())
