@@ -24,7 +24,7 @@ def find_goal(goal_id: ItemId) -> Goal:
     """Get the filename for a goal."""
     return next(
         goal
-        for goal_file in config.GOALS_DIRECTORY.iterdir()
+        for goal_file in reversed(list(config.GOALS_DIRECTORY.iterdir()))
         if (goal := read_goal(goal_file)).id == goal_id
     )
 

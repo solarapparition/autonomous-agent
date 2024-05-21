@@ -8,8 +8,7 @@ from typing import Literal, Sequence
 from autonomous_mind import config
 from autonomous_mind.helpers import count_tokens, load_yaml
 from autonomous_mind.printout import full_itemized_repr, short_itemized_repr
-from autonomous_mind.schema import CallResultEvent, Event, FunctionCallEvent, ItemId
-from autonomous_mind.systems.goal.helpers import read_goal
+from autonomous_mind.schema import CallResultEvent, Event, FunctionCallEvent, ItemId, NotificationEvent
 from autonomous_mind.systems.helpers import save_items
 
 
@@ -25,6 +24,7 @@ def read_event(event_file: Path) -> Event:
     type_mapping = {
         "function_call": FunctionCallEvent,
         "call_result": CallResultEvent,
+        "notification": NotificationEvent,
     }
     return type_mapping[event_dict["type"]].from_mapping(event_dict)
 
@@ -75,8 +75,10 @@ class Feed:
             if focused_goal and action_number > 3 and goal_unrelated:
                 # hide older events not related to the focused goal or its parent
                 continue
-            if action_number == 1 or (not focused_goal and action_number <= 3):
-                # always show last events in full; also show recent events in full if not focused on specific goal
+            if (not focused_goal and action_number <= 3) or (
+                event.goal_id == focused_goal and action_number == 1
+            ):
+                # always show last event related to current goal, or not focused on specific goal
                 event_repr = full_itemized_repr(event)
             else:
                 # otherwise show abbreviated version of event

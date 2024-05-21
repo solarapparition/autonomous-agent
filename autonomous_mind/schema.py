@@ -15,9 +15,11 @@ from autonomous_mind.text import dedent_and_strip
 
 ItemId = NewType("ItemId", str)
 
+
 def generate_id() -> ItemId:
     """Generate a unique identifier."""
     return ItemId(str(uuid4()))
+
 
 @dataclass
 class FunctionCallEvent:
@@ -157,7 +159,49 @@ class CallResultEvent:
         )
 
 
-Event = FunctionCallEvent | CallResultEvent
+@dataclass
+class NotificationEvent:
+    """Notification event."""
+
+    content: str
+    type: Literal["notification"] = "notification"
+    id: ItemId = field(default_factory=generate_id)
+    timestamp: Timestamp = field(default_factory=get_timestamp)
+
+    @property
+    def goal_id(self) -> None:
+        """Get the goal id."""
+        return None
+
+    @classmethod
+    def from_mapping(cls, mapping: MutableMapping[str, Any]) -> Self:
+        """Create an event from a mapping."""
+        mapping["id"] = ItemId(mapping["id"])
+        mapping["timestamp"] = format_timestamp(mapping["timestamp"])
+        return cls(**mapping)
+
+    def __repr__(self) -> str:
+        """Get the string representation of the event."""
+        template = """
+        id: {id}
+        type: notification
+        timestamp: {timestamp}
+        content: |-
+        {content}
+        """
+        content = indent(self.content, "  ")
+        return dedent_and_strip(template).format(
+            id=self.id,
+            timestamp=self.timestamp,
+            content=content,
+        )
+
+    def __str__(self) -> str:
+        """Printout of event."""
+        return repr(self)
+
+
+Event = FunctionCallEvent | CallResultEvent | NotificationEvent
 
 
 @dataclass

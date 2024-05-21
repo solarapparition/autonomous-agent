@@ -22,7 +22,13 @@ from autonomous_mind.schema import (
     Event,
     FunctionCallEvent,
     ItemId,
+    NotificationEvent,
     generate_id,
+)
+from autonomous_mind.systems.agents.helpers import (
+    download_new_messages,
+    new_messages_notification,
+    sender_name,
 )
 from autonomous_mind.systems.feed.events import Feed, read_event, save_events
 from autonomous_mind.systems.goal.goals import Goals
@@ -43,6 +49,7 @@ from autonomous_mind.systems.config import functions as config_functions
 from autonomous_mind.systems.goal import functions as goal_functions
 from autonomous_mind.systems.memory import functions as memory_functions
 from autonomous_mind.systems.agents import functions as agent_functions
+from autonomous_mind.systems.environment import functions as environment_functions
 
 
 def get_python_version() -> str:
@@ -128,10 +135,18 @@ Handles communication with AGENTS—entities capable of acting on their own.
   signature: |-
     async def message_agent(agent_id: str, message: str):
         '''Send a message to an AGENT with the given `agent_id`.'''
+- function: read_messages(agent_id: str)
+  signature: |-
+    def read_messages(agent_id: str):
+        '''Read the latest messages from an AGENT with the given `agent_id`.'''
 - function: list_agents
   signature: |-
     def list_agents():
         '''List all known AGENTS with their ids, names, and short summaries.'''
+- function: edit_agent_description
+  signature: |-
+    def edit_agent_description(id: str, new_description: str, mode: Literal["replace", "append", "prepend"] = "replace"):
+        '''Edit an AGENT's description. `mode` parameter determines how the new description is added.'''
 </system-functions>
 
 ### GOAL_SYSTEM
@@ -156,7 +171,15 @@ Manages {mind_name}'s goals.
 Manages the FEED of events and actions.
 - Max Feed Tokens: {max_feed_tokens}
 <system-functions system="FEED">
-<!-- SYSTEM is WIP.-->
+- function: add_reminder
+  signature: |-
+    def add_reminder(goal_id: str | None, content: str, mode: Literal["until", "day", "hour", "minute", "second"], time: str | int, repeat: bool = False):
+        '''
+        Add a reminder. When the reminder triggers, an event with the reminder content will be added to the FEED.
+        If `goal_id` is provided, the reminder will be associated with that goal, otherwise it will be a general reminder.
+        `time` is either a UTC timestamp or a duration from the current time.
+        If `repeat` is True, the reminder will repeat at the specified interval, OR daily at the timestamp if `mode="until"`.
+        '''
 </system-functions>
 
 ### MEMORY_SYSTEM
@@ -212,7 +235,7 @@ Manages the environment in which {mind_name} operates, including the SYSTEMS the
         '''
 - function: sleep
   signature: |-
-    def sleep(mode: Literal["until", "hour", "minute", "second"], time: str | int):
+    def sleep(mode: Literal["until", "day", "hour", "minute", "second"], time: str | int):
         '''Put {mind_name} to sleep until a specific UTC timestamp or for a specific duration.'''
 </system-functions>
 
@@ -261,6 +284,7 @@ IMPORTANT: the REASONING_PROCEDURE is only the **abstract** procedure for struct
 <reasoning-output>
 {reasoning_output}
 </reasoning-output>
+IMPORTANT: you're not able to call any SYSTEM_FUNCTIONS during the execution of the REASONING_PROCEDURE. This must be done in step 4.
 
 4. Use the REASONING_OUTPUT to determine **one** SYSTEM_FUNCTION to call and the arguments to pass to it. Output the call in YAML format, within the following tags:
 <system-function-call>
@@ -473,6 +497,26 @@ class RunState:
         """Set the action number incremented to state."""
         self.set_and_save("action_number_incremented", value)
 
+    @property
+    def new_message_counts(self) -> MutableMapping[ItemId, int] | None:
+        """Get the new messages from state."""
+        return self.state.get("new_messages")
+
+    @new_message_counts.setter
+    def new_message_counts(self, value: MutableMapping[ItemId, int]) -> None:
+        """Set the new messages to state."""
+        self.set_and_save("new_messages", value)
+
+    @property
+    def notifications_saved(self) -> bool | None:
+        """Get the notifications saved from state."""
+        return self.state.get("notifications_saved")
+
+    @notifications_saved.setter
+    def notifications_saved(self, value: bool) -> None:
+        """Set the notifications saved to state."""
+        self.set_and_save("notifications_saved", value)
+
 
 def extract_output_sections(output: str) -> tuple[str, str]:
     """Extract required info from the output."""
@@ -513,6 +557,7 @@ async def call_system_function(call_args: Mapping[str, Any]) -> str:
         "GOAL": goal_functions,
         "MEMORY": memory_functions,
         "AGENTS": agent_functions,
+        "ENVIRONMENT": environment_functions,
     }
     system_name = call_args["system"]
     function_name = call_args["function"]
@@ -571,6 +616,18 @@ def increment_action_number() -> Literal[True]:
     return True
 
 
+def set_new_messages(run_state: RunState) -> None:
+    """Set new message events."""
+    run_state.new_message_counts = (
+        run_state.new_message_counts or download_new_messages()
+    )
+    if new_message_counts := run_state.new_message_counts:
+        new_messages_notification_event = new_messages_notification(new_message_counts)
+        run_state.notifications_saved = run_state.notifications_saved or save_events(
+            [new_messages_notification_event]
+        )
+
+
 async def run_mind() -> None:
     """
     Run the autonomous Mind for one round.
@@ -578,9 +635,10 @@ async def run_mind() -> None:
     """
     action_number = config.GLOBAL_STATE["action_number"]
     completed_actions = action_number - 1
+    run_state = RunState(state_file=config.RUN_STATE_FILE)
+    set_new_messages(run_state)
     goals = Goals(config.GOALS_DIRECTORY)
     feed = Feed(config.EVENTS_DIRECTORY)
-    run_state = RunState(state_file=config.RUN_STATE_FILE)
     run_state.output = run_state.output or await generate_mind_output(
         goals=goals.format(),
         feed=feed.format(
@@ -642,7 +700,9 @@ async def run_mind() -> None:
     read_event.cache_clear()
     read_goal.cache_clear()
     run_state.archive()
-    print("Mind run complete.")
+    print("Action run complete.")
 
 
 asyncio.run(run_mind())
+
+# > update related_to to determine whether it's related to current goal or not
