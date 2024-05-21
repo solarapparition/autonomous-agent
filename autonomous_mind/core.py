@@ -82,9 +82,11 @@ This is {mind_name}'s self-description.
 It can be edited using the appropriate CONFIG_SYSTEM FUNCTION.
 
 ## GOALS
-This section contains {mind_name}'s current goals. The goal that is FOCUSED is the one that {mind_name} is actively working on.
-A parent of a goal is a goal that the goal is a subgoal of. The chain of parent goals of a goal provides context for the purpose of the goal.
-Parent goals of the FOCUSED goal will have SUBGOAL_FOCUSED.
+This section contains {mind_name}'s current goals. The goal that is FOCUSED is the one that {mind_name} is actively working on. Not all goals are displayed here; here are the rules for what is shown versus not:
+- The FOCUSED_GOAL is always shown in full.
+- Any goal that is part of the FOCUSED_GOAL's parent "chain" (its parent, grandparent, and so on) is shown in abbreviated format.
+- The subgoals of the FOCUSED_GOAL are shown abbreviated.
+- All root-level goals are shown abbreviated.
 <goals>
 {goals}
 </goals>
@@ -94,14 +96,15 @@ These goals are autonomously determined by {mind_name}, and can be interacted wi
 This section contains {mind_name}'s MEMORY_NODES that have been loaded. MEMORY_NODES are chunks of information that {mind_name} has automatically or manually learned. Any data in the SYSTEM that has an `id` can become a MEMORY_NODE.
 
 ### PINNED_MEMORY_NODES
-Pinned nodes will not be automatically removed.
+Pinned nodes will persist until their expiry date, or until they are unpinned.
 <memory-subsection="pinned-nodes">
-- type: agent_info
+- type: agent
   content: |-
     id: 25b9a536-54d0-4162-bae9-ec81dba993e9
     name: {developer_name}
     description: my DEVELOPER, responsible for coding and maintaining me. They can provide me with new functionality if requested, and more generally can help me with tasks that I can't do yet.
   pin_timestamp: 2024-05-08 14:21:46Z
+  expiry_timestamp: None
   context: |-
     pinning this fyi, since you're stuck with having to talk to me for awhile. once we've got you fully autonomous you can unpin this, if you want to --solar
 </memory-subsection>
@@ -141,10 +144,24 @@ Handles communication with AGENTS—entities capable of acting on their own.
   signature: |-
     def list_agents():
         '''List all known AGENTS with their ids, names, and short summaries.'''
+- function: add_to_contacts
+  signature: |-
+    def add_to_contacts(name: str, description: str):
+        '''Add a new AGENT to agents that will be listed by list_agents.'''
 - function: edit_agent_description
   signature: |-
     def edit_agent_description(id: str, new_description: str, mode: Literal["replace", "append", "prepend"] = "replace"):
         '''Edit an AGENT's description. `mode` parameter determines how the new description is added.'''
+- function: call_anonymous_agent
+  signature: |-
+    async def call_anonymous_agent(message: str):
+        '''Call a new anonymous cloud-based AGENT with the given `message`. This AGENT is provisioned automatically from an agent swarm and will not be saved in the AGENTS list, but can still be interacted with via message_agent.'''
+        raise NotImplementedError("Function is still in development.")
+- function: create_submind
+  signature: |-
+    async def create_submind(name: str, description: str):
+        '''Create a new AGENT that is a submind of the current Mind, with all of its own capabilities and memory. The new AGENT can be given a role and instruction (such as an assistant), but it will be fully autonomous and is not guaranteed to be fully controllable.'''
+        raise NotImplementedError("Function is still in development.")
 </system-functions>
 
 ### GOAL_SYSTEM
@@ -162,7 +179,15 @@ Manages {mind_name}'s goals.
 - function: remove_goal
   signature: |-
     def remove_goal(id: str, reason: Literal["completed", "cancelled"]):
-        '''Remove a goal for {mind_name} with the given `id`.'''
+        '''Remove a goal from the GOALS section with the given `id`.'''
+- function: switch_to_goal
+  signature: |-
+    def switch_to_goal(id: str):
+        '''Switch the FOCUSED_GOAL to the goal with the given `id`. **Note**: this can cause the FOCUSED_GOAL and/or its parent chain to become hidden in the GOALS section. See the display rules there for more information.'''
+- function: edit_goal
+  signature: |-
+    def edit_goal(id: str, new_summary: str | None, new_details: str | None, new_parent_goal_id: str | None):
+        '''Edit a goal with the given `id`. Any parameter set to None will not be changed.'''
 </system-functions>
 
 ### FEED_SYSTEM
@@ -173,7 +198,7 @@ Manages the FEED of events and actions.
   signature: |-
     def add_reminder(goal_id: str | None, content: str, mode: Literal["until", "day", "hour", "minute", "second"], time: str | int, repeat: bool = False):
         '''
-        Add a reminder. When the reminder triggers, an event with the reminder content will be added to the FEED.
+        Add a reminder in the FEED. When the reminder triggers, an event with the reminder content will be added to the FEED.
         If `goal_id` is provided, the reminder will be associated with that goal, otherwise it will be a general reminder.
         `time` is either a UTC timestamp or a duration from the current time.
         If `repeat` is True, the reminder will repeat at the specified interval, OR daily at the timestamp if `mode="until"`.
@@ -181,22 +206,26 @@ Manages the FEED of events and actions.
 </system-functions>
 
 ### MEMORY_SYSTEM
-Allows searching through memory of GOALS, EVENTS, FACTS, TOOLS, and AGENTS.
+Allows access of memories of GOALS, EVENTS, TOOLS, and AGENTS, as well as personal NOTES.
 - Max Memory Tokens: {max_memory_tokens}
 <system-functions system="MEMORY">
-- function: save_memory_node
+- function: save_note_memory_node
   signature: |-
-    def save_memory_node(content: str, context: str, summary: str, load_to_memory: bool = True):
+    def save_note_memory_node(content: str, context: str, summary: str, load_to_memory: bool = True):
         '''
-        Save a new MEMORY_NODE with the given `content`.
+        Save a new NOTE MEMORY_NODE with the given `content`.
         `context` adds context that might not be obvious from just the `content`.
         `summary` should be no more than a sentence.
         `load_to_memory` determines whether the node should be immediately loaded into the MEMORY section or not.
         '''
-- function: save_item_as_memory_node
+- function: search_memories
   signature: |-
-    def save_item_as_memory_node(item_id: str, context: str, summary: str, load_to_memory: bool = True):
-        '''Save any item that has an id as a MEMORY_NODE, copying its contents into the node. Can be used to view the contents of collapsed items in the FEED.'''
+    def search(by: Literal["id", "keywords", "semantic_embedding"], query: str):
+        '''
+        Search for an item (GOAL, EVENT, AGENT, etc.) by various means. Can be used to find items that are hidden, or view the contents of collapsed items.
+        `query`'s meaning will change depending on the `by` parameter.
+        '''
+        raise NotImplementedError
 </system-functions>
 
 ### CONFIG_SYSTEM
@@ -222,12 +251,13 @@ Contains custom tools that {mind_name} can use.
 </system-functions>
 
 ### ENVIRONMENT_SYSTEM
-Manages the environment in which {mind_name} operates, including the SYSTEMS themselves.
+A meta-SYSTEM that manages the environment in which {mind_name} operates, including the SYSTEMS themselves.
 - Source Code Directory: {source_code_location}
 - Python Version: python_version
 - Build Config File: {{source_code_dir}}/{build_config_file}
 - Machine Info:
 {machine_info}
+- CWD: {{source_code_dir}}
 <system-functions system="ENVIRONMENT">
 - function: request_system_function
   signature: |-
@@ -239,6 +269,10 @@ Manages the environment in which {mind_name} operates, including the SYSTEMS the
   signature: |-
     def sleep(mode: Literal["until", "day", "hour", "minute", "second"], time: str | int):
         '''Put {mind_name} to sleep until a specific UTC timestamp or for a specific duration.'''
+- function: send_shell_command
+  signature: |-
+    def send_shell_command(command: str):
+        '''Send a shell command to the environment the Mind is hosted on. **Use caution**, as it's possible to render the SYSTEMS inoperable.'''
 </system-functions>
 
 The following message will contain INSTRUCTIONS on producing action inputs to call SYSTEM_FUNCTIONS.
@@ -561,10 +595,6 @@ async def call_system_function(call_args: Mapping[str, Any]) -> str:
     if not system:
         raise NotImplementedError(f"TODO: Implement {system_name} system.")
 
-    # temporary missing function handling
-    if system is memory_functions and function_name not in {"save_memory_node"}:
-        return f"Function {function_name} is not a valid function for the MEMORY system. Please see the SYSTEM_FUNCTIONS section for available functions."
-
     call: Callable[..., Any] | None = getattr(system, function_name, None)
     if not call:
         raise NotImplementedError(
@@ -702,7 +732,3 @@ async def run_mind() -> None:
 
 asyncio.run(run_mind())
 
-# > memory node: copy item over
-# > display total number of unread messages
-# > update message reading to automatically make messages read
-# > update related_to to determine whether it's related to current goal or not
