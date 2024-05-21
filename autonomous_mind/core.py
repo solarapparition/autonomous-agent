@@ -22,13 +22,11 @@ from autonomous_mind.schema import (
     Event,
     FunctionCallEvent,
     ItemId,
-    NotificationEvent,
     generate_id,
 )
 from autonomous_mind.systems.agents.helpers import (
     download_new_messages,
     new_messages_notification,
-    sender_name,
 )
 from autonomous_mind.systems.feed.events import Feed, read_event, save_events
 from autonomous_mind.systems.goal.goals import Goals
@@ -195,6 +193,10 @@ Allows searching through memory of GOALS, EVENTS, FACTS, TOOLS, and AGENTS.
         `summary` should be no more than a sentence.
         `load_to_memory` determines whether the node should be immediately loaded into the MEMORY section or not.
         '''
+- function: save_item_as_memory_node
+  signature: |-
+    def save_item_as_memory_node(item_id: str, context: str, summary: str, load_to_memory: bool = True):
+        '''Save any item that has an id as a MEMORY_NODE, copying its contents into the node. Can be used to view the contents of collapsed items in the FEED.'''
 </system-functions>
 
 ### CONFIG_SYSTEM
@@ -249,11 +251,11 @@ Refer to the GOALS section for more context on this goal and its parents.
 
 Remember that you are in the role of {mind_name}. Go through the following steps to determine the action input to call SYSTEM_FUNCTIONS.
 
-1. Review the FEED for what has happened since the last action you've taken, by outputting a YAML with the following structure, enclosed in tags. Follow the instructions in comments, but don't output the comments:
+1. Review the FEED for what has happened since the last function call you made, by outputting a YAML with the following structure, enclosed in tags. Follow the instructions in comments, but don't output the comments:
 <feed-review>
 my_last_action: |-
-  {my_last_action} # what you were trying to do with your last action
-new_events: # events in the FEED that have happened since your last action (whether related to it or not)
+  {my_last_action} # what you were trying to do with your last function call
+new_events: # events in the FEED that have happened since the last function call (including both its result and any unrelated events)
   - event_id: {event_id} # id of the feed item
     related_to: |-
       {related_to} # what goal/action/event this event is related to; mention specific ids if present
@@ -268,25 +270,19 @@ action_outcome:
   action_success: !!int {action_success} # whether the action input resulted in success; 1 if the action was successful, 0 if it's unclear (or you're not expecting immediate results), -1 if it failed
 </feed-review>
 
-2. Create a REASONING_PROCEDURE. The REASONING_PROCEDURE is a nested tree structure that provides abstract procedural reasoning that, when executed, processes the raw information presented above and outputs a decision or action.
+2. Create and execute a REASONING_PROCEDURE. The REASONING_PROCEDURE is a nested tree structure that provides abstract procedural reasoning that, when executed, processes the raw information presented above and outputs a decision or action.
 Suggestions for the REASONING_PROCEDURE:
 - Use whatever structure is most comfortable, but it should allow arbitrary nesting levels to enable deep analysis—common choices include YAML, pseudocode, Mermaid, pseudo-XML, JSON, or novel combinations of these. The key is to densely represent meaning and reasoning.
 - Include unique ids for nodes of the tree to allow for references and to jump back and fourth between parts of the process. Freely reference those ids to allow for a complex, interconnected reasoning process.
 - The REASONING_PROCEDURE should synthesize and reference information from all sections above (INFORMATION, GOALS, FEED, MEMORY, SYSTEM_FUNCTIONS), as well as previously defined reasoning nodes. Directly reference sections by name (e.g., "FEED" or "GOALS"), specific items by id, and reasoning nodes by their id.
-- It may be effective to build up the procedure hierarchically, starting from examining basic facts, to more advanced compositional analysis, similar to writing a procedural script for a program but interpretable by you to be output in the <reasoning-output> section below.
-IMPORTANT: The REASONING_PROCEDURE must be output within the following XML tags (but content within the tags can be any format, as mentioned above):
+- It may be effective to build up the procedure hierarchically, starting from examining basic facts, to more advanced compositional analysis, similar to writing a procedural script for a program but interpretable by you.
+IMPORTANT: The REASONING_PROCEDURE's execution must be output within the following XML tags (but content within the tags can be any format, as mentioned above):
 <reasoning-procedure>
 {reasoning_procedure}
 </reasoning-procedure>
-IMPORTANT: the REASONING_PROCEDURE is only the **abstract** procedure for structuring your reasoning at a high level; for step 2 you will not actually execute the procedure—that will be done in step 3.
+IMPORTANT: you're not able to call any SYSTEM_FUNCTIONS during the execution of the REASONING_PROCEDURE. This must be done in step 3.
 
-3. Execute the REASONING_PROCEDURE and output results from _all_ parts of the procedure, within the following tags:
-<reasoning-output>
-{reasoning_output}
-</reasoning-output>
-IMPORTANT: you're not able to call any SYSTEM_FUNCTIONS during the execution of the REASONING_PROCEDURE. This must be done in step 4.
-
-4. Use the REASONING_OUTPUT to determine **one** SYSTEM_FUNCTION to call and the arguments to pass to it. Output the call in YAML format, within the following tags:
+3. Use the output of the REASONING_PROCEDURE to determine **one** SYSTEM_FUNCTION to call and the arguments to pass to it. Output the call in YAML format, within the following tags:
 <system-function-call>
 action_reasoning: |-
   {action_reasoning}
@@ -314,7 +310,7 @@ arguments:
 </system-function-call>
 The above is an example only. The actual function and arguments will depend on the REASONING_OUTPUT.
 
-Make sure to follow all of the above steps and use the indicated tags and format—otherwise, the SYSTEM will output an error and you will have to try again.
+Make sure to follow all of the above steps and use the indicated tags and format—otherwise, the SYSTEM will output an error and you will have to try again. Remember, only output **one** SYSTEM_FUNCTION call at a time.
 """
 
 
@@ -601,9 +597,10 @@ def update_new_events(
                 review_item
                 for review_item in feed_review["new_events"]
                 if review_item["event_id"] == str(event.id)
-            )
+            ),
+            None,
         )
-        event.summary = event_review["summary"]
+        event.summary = event_review["summary"] if event_review else ""
     if (action_success := feed_review["action_outcome"]["action_success"]) in [-1, 1]:
         last_function_call.success = action_success
     return save_events([last_function_call, *events_since_call])
@@ -705,4 +702,7 @@ async def run_mind() -> None:
 
 asyncio.run(run_mind())
 
+# > memory node: copy item over
+# > display total number of unread messages
+# > update message reading to automatically make messages read
 # > update related_to to determine whether it's related to current goal or not

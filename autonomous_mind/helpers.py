@@ -39,13 +39,13 @@ def save_yaml(
     yaml.dump(data, location)
 
 
-def load_yaml(location: Path, yaml: YAML = DEFAULT_YAML) -> MutableMapping[str, Any]:
+def load_yaml(location: Path, yaml: YAML = DEFAULT_YAML) -> Any:
     """Load YAML from a file."""
     with location.open("r", encoding="utf-8") as file:
         return yaml.load(file)
 
 
-def from_yaml_str(yaml_str: str, yaml: YAML = DEFAULT_YAML) -> MutableMapping[str, Any]:
+def from_yaml_str(yaml_str: str, yaml: YAML = DEFAULT_YAML) -> Any:
     """Load yaml from a string."""
     return yaml.load(yaml_str)
 

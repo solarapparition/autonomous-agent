@@ -25,10 +25,14 @@ def post_message(record_file: Path, message: str, sender: str, unread: bool) -> 
             f.write("  new: true\n")
 
 
+def get_record_file(agent_id: str) -> Path:
+    """Get the record file for an agent."""
+    return Path(f"{AGENTS_DIRECTORY}/{agent_id}/messages.yaml")
+
+
 def record_message_from_self(agent_id: str, message: str) -> None:
     """Record a message in the message log for the agent."""
-    record_file = Path(f"{AGENTS_DIRECTORY}/{agent_id}/messages.yaml")
-    post_message(record_file, message, config.NAME, unread=False)
+    post_message(get_record_file(agent_id), message, config.NAME, unread=False)
 
 
 def load_agent_module(agent_id: str) -> ModuleType:
@@ -48,7 +52,15 @@ def count_new_messages(agent_id: ItemId) -> int:
     if not record_file.exists():
         return 0
     records = load_yaml(record_file)
-    return sum(bool(record) for record in records if record["sender"] != config.NAME and record.get("new"))  # type: ignore
+    return (
+        sum(
+            bool(record)
+            for record in records
+            if record["sender"] != config.NAME and record.get("new")
+        )
+        if records
+        else 0
+    )
 
 
 def download_new_messages() -> dict[ItemId, int]:
@@ -61,9 +73,8 @@ def download_new_messages() -> dict[ItemId, int]:
     message_counts: dict[ItemId, int] = {}
     for agent_id in agent_ids:
         agent_module = load_agent_module(agent_id)
-        agent_module.download_new_messages()
-        if new_messages := count_new_messages(agent_id):
-            message_counts[agent_id] = new_messages
+        if num_new_messages := agent_module.download_new_messages():
+            message_counts[agent_id] = num_new_messages
     return message_counts
 
 
@@ -87,4 +98,6 @@ def new_messages_notification(
     sender_names = ", ".join(
         f"{name} ({sender_id})" for sender_id, name in senders.items()
     )
-    return NotificationEvent(content=f"New message(s) from: {sender_names}")
+    return NotificationEvent(
+        content=f"New message(s) from: {sender_names}. Use `AGENTS.read_messages` to view."
+    )

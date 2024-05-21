@@ -47,8 +47,6 @@ class Goals:
         ordered_goals, orphaned_goals = reorder_goals(goals)
         if orphaned_goals:
             raise NotImplementedError("TODO: Implement handling for orphaned goals.")
-        if len(goals) == 3:
-            breakpoint()  # examine ordered_goals to see if it's correct
         if len(ordered_goals) > 10:
             raise NotImplementedError(
                 "TODO: Implement handling for more than 10 goals."

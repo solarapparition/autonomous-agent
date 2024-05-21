@@ -167,6 +167,7 @@ class NotificationEvent:
     type: Literal["notification"] = "notification"
     id: ItemId = field(default_factory=generate_id)
     timestamp: Timestamp = field(default_factory=get_timestamp)
+    summary: str = ""
 
     @property
     def goal_id(self) -> None:
@@ -186,13 +187,17 @@ class NotificationEvent:
         id: {id}
         type: notification
         timestamp: {timestamp}
+        summary: |-
+        {summary}
         content: |-
         {content}
         """
+        summary = indent(self.summary, "  ")
         content = indent(self.content, "  ")
         return dedent_and_strip(template).format(
             id=self.id,
             timestamp=self.timestamp,
+            summary=summary,
             content=content,
         )
 
