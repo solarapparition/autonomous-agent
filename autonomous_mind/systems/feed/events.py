@@ -40,7 +40,7 @@ class Feed:
         """Get the timestamps of all events."""
         return sorted(list(self.events_directory.iterdir()))
 
-    def call_event_batch(self, action_number: int = 1) -> list[Event]:
+    def call_event_batch(self, action_batch_number: int = 1) -> list[Event]:
         """New events since a certain number of actions ago."""
         events: list[Event] = []
         action_count = 0
@@ -49,7 +49,7 @@ class Feed:
             events.insert(0, event)
             if isinstance(event, FunctionCallEvent):
                 action_count += 1
-            if action_count == action_number:
+            if action_count == action_batch_number:
                 break
         return events
 
@@ -63,7 +63,7 @@ class Feed:
         # max_semi_recent_tokens = 1000
         recent_events_text = ""
         current_action_text = ""
-        action_number = 1
+        action_batch_number = 1
         for file in reversed(self.event_files):
             event = read_event(file)
             # we represent the event differently depending on various conditions
@@ -72,11 +72,11 @@ class Feed:
                 or (parent_goal_id and event.goal_id != parent_goal_id)
                 or (not parent_goal_id and not event.goal_id)
             )
-            if focused_goal and action_number > 3 and goal_unrelated:
+            if focused_goal and action_batch_number > 3 and goal_unrelated:
                 # hide older events not related to the focused goal or its parent
                 continue
-            if (not focused_goal and action_number <= 3) or (
-                event.goal_id == focused_goal and action_number == 1
+            if (not focused_goal and action_batch_number <= 3) or (
+                event.goal_id == focused_goal and action_batch_number == 1
             ):
                 # always show last event related to current goal, or not focused on specific goal
                 event_repr = full_itemized_repr(event)
@@ -86,7 +86,7 @@ class Feed:
             current_action_text = "\n".join([event_repr, current_action_text])
             if not isinstance(event, FunctionCallEvent):
                 continue
-            action_number += 1
+            action_batch_number += 1
             proposed_recent_events_text = "\n".join(
                 [current_action_text, recent_events_text]
             )
