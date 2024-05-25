@@ -35,10 +35,10 @@ class Goals:
         goal = find_goal(focused_id)
         return goal.parent_goal_id
 
-    def format(self) -> str:
+    def format(self) -> str | None:
         """Get a printable representation of the goals."""
         if not self.goals_files:
-            return "None"
+            return None
         if len(self.goals_files) == 1:
             goal = read_goal(self.goals_files[0])
             if goal.id == self.focused:

@@ -2,6 +2,7 @@
 
 # pylint: disable=line-too-long
 
+from autonomous_mind import config
 from autonomous_mind.helpers import get_timestamp
 from autonomous_mind.schema import Goal, ItemId
 from autonomous_mind.systems.config.global_state import set_global_state
@@ -18,6 +19,7 @@ def add_goal(summary: str, details: str | None, parent_goal_id: str | None = Non
     If `switch_focus` is True, then the new goal will automatically become the FOCUSED goal.
     """
     goal = Goal(
+        batch_number=config.ACTION_BATCH_NUMBER,
         timestamp=get_timestamp(),
         summary=summary,
         details=details,

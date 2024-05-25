@@ -49,6 +49,9 @@ from autonomous_mind.systems.memory import functions as memory_functions
 from autonomous_mind.systems.agents import functions as agent_functions
 from autonomous_mind.systems.environment import functions as environment_functions
 
+AGENT_COLOR = Fore.GREEN
+PROMPT_COLOR = Fore.BLUE
+
 
 def get_python_version() -> str:
     """Get the Python version from the pyproject.toml file."""
@@ -79,20 +82,23 @@ General information about {mind_name}'s current state.
 <general-information>
 - Compute Rate (how frequently {mind_name} can act): {compute_rate}
 - Current Time: {current_time}
-- Completed Action Batches: {completed_actions}
 - LLM: `{llm_backend}`
 - LLM Knowledge Cutoff: {llm_knowledge_cutoff}
 </general-information>
 
 ### CONFIG_SYSTEM_FUNCTIONS
 <system-functions system="CONFIG">
-- function: update_self_description
+- function: modify_self_description
   signature: |-
-    def update_self_description(mode: Literal["replace", "append", "prepend"], new_description: str):
-        """Update {mind_name}'s self-description. Set `mode` parameter to change how the new description is added."""
+    def modify_self_description(key_path: tuple[str | int], mode: Literal["add_or_update", "delete"], value: JSONSerializable | "TBD" | None):
+        """
+        Modify {mind_name}'s self-description with additional, **permanent** information about their identity, to help it remain consistent over long time horizons.
+        - the self-description is a YAML structure that can be modified by adding, updating, or deleting keys.
+        - `key_path` is used to traverse the YAML structure to the desired key.
+        """
 </system-functions>
 
-## GOALS_SYSTEM
+## GOAL_SYSTEM
 Manages {mind_name}'s goals.
 
 ### GOAL_TREE
@@ -104,13 +110,13 @@ This section contains {mind_name}'s current goals, listed in an order resembling
 <goals>
 {goals}
 </goals>
-These goals are autonomously determined by {mind_name}, and can be interacted with through the GOALS_SYSTEM_FUNCTION.
+These goals are autonomously determined by {mind_name}, and can be interacted with through the GOAL_SYSTEM_FUNCTION.
 
-### GOALS_SYSTEM_FUNCTIONS
+### GOAL_SYSTEM_FUNCTIONS
 <system-functions system="GOAL">
 - function: add_goal
   signature: |-
-    def add_goal(summary: str, details: str, parent_goal_id: str | None = None, switch_focus: bool = True):
+    async def add_goal(summary: str, details: str, parent_goal_id: str | None = None, switch_focus: bool = True):
         """
         `summary` should be no more than a sentence.
         `details` should only be provided if the goal requires more explanation than can be given in the `summary`.
@@ -119,15 +125,15 @@ These goals are autonomously determined by {mind_name}, and can be interacted wi
         """
 - function: remove_goal
   signature: |-
-    def remove_goal(id: str, reason: Literal["completed", "cancelled"]):
+    async def remove_goal(id: str, reason: Literal["completed", "cancelled"]):
         """Remove a goal from the GOALS section with the given `id`."""
 - function: switch_to_goal
   signature: |-
-    def switch_to_goal(id: str):
+    async def switch_to_goal(id: str):
         """Switch the FOCUSED_GOAL to the goal with the given `id`. **Note**: this can cause the FOCUSED_GOAL and/or its parent chain to become hidden in the GOALS section. See the display rules there for more information."""
 - function: edit_goal
   signature: |-
-    def edit_goal(id: str, new_summary: str | None, new_details: str | None, new_parent_goal_id: str | None):
+    async def edit_goal(id: str, new_summary: str | None, new_details: str | None, new_parent_goal_id: str | None):
         """Edit a goal with the given `id`. Any parameter set to None will not be changed."""
 </system-functions>
 
@@ -147,7 +153,7 @@ MEMORY_NODES are can be interacted with through FUNCTIONS for that SYSTEM.
 <system-functions system="MEMORY">
 - function: save_note_memory_node
   signature: |-
-    def save_note_memory_node(content: str, context: str, summary: str, load_to_memory: bool = True):
+    async def save_note_memory_node(content: str, context: str, summary: str, load_to_memory: bool = True):
         """
         Save a new NOTE MEMORY_NODE with the given `content`.
         `context` adds context that might not be obvious from just the `content`.
@@ -156,7 +162,7 @@ MEMORY_NODES are can be interacted with through FUNCTIONS for that SYSTEM.
         """
 - function: search_memories
   signature: |-
-    def search(by: Literal["id", "keywords", "semantic_embedding"], query: str):
+    async def search(by: Literal["id", "keywords", "semantic_embedding"], query: str):
         """
         Search for an item (GOAL, EVENT, AGENT, etc.) by various means. Can be used to find items that are hidden, or view the contents of collapsed items.
         `query`'s meaning will change depending on the `by` parameter.
@@ -164,7 +170,7 @@ MEMORY_NODES are can be interacted with through FUNCTIONS for that SYSTEM.
         raise NotImplementedError
 - function: refresh_memory
   signature: |-
-    def refresh_memory(memory_id: str):
+    async def refresh_memory(memory_id: str):
         """Refresh a MEMORY_NODE with the given `memory_id`. This will update its expiry timestamp to the current time, and bring it to the top of the list."""
 </system-functions>
 
@@ -173,10 +179,13 @@ Manages the FEED of events and actions.
 - Max Feed Tokens: {max_feed_tokens}
 
 ### FEED
-This contains external events as well as calls that {mind_name} has sent to the SYSTEM_FUNCTIONS. There are 2 main FEED item types in the feed:
-- Events/actions for the goal that is currently FOCUSED.
-- Recent events/actions for any goal, even ones not FOCUSED.
-The FEED shows a maximum amount of tokens in total and per item, and will be summarized/truncated automatically if it exceeds these limits.
+This contains external events as well as calls that {mind_name} has sent to the SYSTEM_FUNCTIONS.
+- There are 2 main FEED item types in the feed:
+  - Events/actions for the goal that is currently FOCUSED.
+  - Recent events/actions for any goal, even ones not FOCUSED.
+- The FEED shows a maximum amount of tokens in total and per item, and will be summarized/truncated automatically if it exceeds these limits.
+- Events/actions are grouped into batches. Each time {mind_name} makes a set of concurrent function calls, the calls and any events that happen after the calls are grouped into a batch.
+- Current Action Batch Number: {action_batch_number}
 <feed>
 {feed}
 </feed>
@@ -186,7 +195,7 @@ FEED items are automatically populated by the FEED_SYSTEM, and can be interacted
 <system-functions system="FEED">
 - function: add_reminder
   signature: |-
-    def add_reminder(goal_id: str | None, content: str, mode: Literal["until", "day", "hour", "minute", "second"], time: str | int, repeat: bool = False):
+    async def add_reminder(goal_id: str | None, content: str, mode: Literal["until", "day", "hour", "minute", "second"], time: str | int, repeat: bool = False):
         """
         Add a reminder in the FEED. When the reminder triggers, an event with the reminder's `content` will be added to the FEED.
         If `goal_id` is provided, the reminder will be associated with that goal, otherwise it will be a general reminder.
@@ -197,6 +206,12 @@ FEED items are automatically populated by the FEED_SYSTEM, and can be interacted
 
 ## AGENTS_SYSTEM
 Handles communication with AGENTS—entities capable of acting on their own.
+
+### OPENED_AGENT_CONVERSATION
+An ongoing conversation with an AGENT. {mind_name} can only have one conversation open at a time.
+<opened-agent-conversation>
+{opened_agent_conversation}
+</opened-agent-conversation>
 
 ### PINNED_AGENTS_LIST
 This is a list of pinned AGENTS that {mind_name} can communicate with.
@@ -220,18 +235,18 @@ This is a list of AGENTS that {mind_name} has recently interacted with.
 - function: message_agent
   signature: |-
     async def message_agent(agent_id: str, message: str):
-        """Send a message to an AGENT with the given `agent_id`."""
-- function: read_messages(agent_id: str)
+        """Send a message to an AGENT with the given `agent_id`. Can send messages to self."""
+- function: open_conversation(agent_id: str)
   signature: |-
-    def read_messages(agent_id: str):
-        """Read the latest messages from an AGENT with the given `agent_id`."""
+    async def open_conversation(agent_id: str):
+        """Switch the OPENED_AGENT_CONVERSATION to the AGENT with the given `agent_id`. The currently open conversation will be closed."""
 - function: add_to_agent_list
   signature: |-
-    def add_to_contacts(name: str, description: str):
+    async def add_to_contacts(name: str, description: str):
         """Add a new AGENT to agents that will be listed by list_agents."""
 - function: edit_agent_description
   signature: |-
-    def edit_agent_description(id: str, new_description: str, mode: Literal["replace", "append", "prepend"] = "replace"):
+    async def edit_agent_description(id: str, new_description: str, mode: Literal["replace", "append", "prepend"] = "replace"):
         """Edit an AGENT's description. `mode` parameter determines how the new description is added."""
 - function: call_anonymous_agent
   signature: |-
@@ -259,12 +274,12 @@ None - no subminds have been created.
 <system-functions system="SUBMINDS">
 - function: create_submind
   signature: |-
-    def create_submind(name: str, description: str):
+    async def create_submind(name: str, description: str):
         """Create a new AGENT that is a submind of the current AMM, with all of its own capabilities and memory. The new AGENT can be given a role and instruction (such as an assistant), but it will be fully autonomous and is not guaranteed to be fully controllable."""
         raise NotImplementedError("Function is still in development.")
 - function: send_submind_chat_message
   signature: |-
-    def send_submind_chat_message(message: str):
+    async def send_submind_chat_message(message: str):
         """Send a message to the SUBMINDS_CHAT group chat."""
 </system-functions>
 
@@ -275,21 +290,21 @@ Contains custom system functions that {mind_name} can use and create. This is th
 <pinned-tools-list>
 - function: take_picture
   signature: |-
-    def take_picture():
+    async def take_picture():
         """Take a picture with the camera plugged into {mind_name}'s host machine."""
         raise NotImplementedError("Tool is still in development.")
 - function: speak
   signature: |-
-    def speak(message: str):
+    async def speak(message: str):
         """Speak a message using the audio output device plugged into {mind_name}'s host machine."""
         raise NotImplementedError("Tool is still in development.")
 - function: print
   signature: |-
-    def print(message: str):
+    async def print(message: str):
         """Print a message to the console."""
 - function: view_image
   signature: |-
-    def view_image(image_path: str):
+    async def view_image(image_path: str):
         """View an image."""
 </pinned-tools-list>
 
@@ -302,11 +317,11 @@ Contains custom system functions that {mind_name} can use and create. This is th
 <system-functions system="TOOL">
 - function: code_function_tool
   signature: |-
-    def code_function_tool(name: str, function_code: str):
+    async def code_function_tool(name: str, function_code: str):
         """Add a new function as a TOOL to the TOOL_SYSTEM with the given `name` and `code`."""
 - function: request_tool
   signature: |-
-    def request_tool(name: str, description: str):
+    async def request_tool(name: str, description: str):
         """Request a new TOOL to be added to the TOOL_SYSTEM by the DEVELOPER. `description` includes what the tool should do. Use for tools requiring more complex logic than is feasible by using `code_tool`."""
 </system-functions>
 
@@ -324,15 +339,15 @@ A meta-SYSTEM that manages the environment in which {mind_name} operates, includ
 <system-functions system="ENVIRONMENT">
 - function: request_system_function
   signature: |-
-    def request_system_function(system: str, function: str, description: str):
+    async def request_system_function(system: str, function: str, description: str):
         """Request a new SYSTEM_FUNCTION to be added to a SYSTEM by the DEVELOPER. `description` includes what the function should do. SYSTEM_FUNCTIONS specifically interact with the SYSTEMS—for more general external tools, use `request_tool`."""
 - function: sleep
   signature: |-
-    def sleep(mode: Literal["until", "day", "hour", "minute", "second"], time: str | int):
+    async def sleep(mode: Literal["until", "day", "hour", "minute", "second"], time: str | int):
         """Put {mind_name} to sleep until a specific UTC timestamp or for a specific duration."""
 - function: send_shell_command
   signature: |-
-    def send_shell_command(command: str):
+    async def send_shell_command(command: str):
         """Send a shell command to the environment the AMM is hosted on. **Use caution**, as it's possible to render the SYSTEMS inoperable."""
 </system-functions>
 
@@ -379,9 +394,10 @@ action_batch_outcomes:
 Suggestions for the REASONING_PROCEDURE:
 - Use whatever structure is most comfortable, but it should allow arbitrary nesting levels to enable deep analysis—common choices include YAML, pseudocode, Mermaid, pseudo-XML, JSON, or novel combinations of these. The key is to densely represent meaning and reasoning.
 - Include unique ids for nodes of the tree to allow for references and to jump back and fourth between parts of the process. Freely reference those ids to allow for a complex, interconnected reasoning process.
-- The REASONING_PROCEDURE should synthesize and reference information from all SYSTEMS above (CONFIG, GOALS, MEMORY, FEED, AGENTS, SUBMINDS, TOOLS, ENVIRONMENT), their subsections, as well as previously created reasoning nodes. Directly reference relevant section headers by name (e.g., "FEED" or "GOAL_TREE"), specific items by id, and reasoning nodes by their id.
+- The REASONING_PROCEDURE should synthesize and reference information from all SYSTEMS above (CONFIG, GOAL, MEMORY, FEED, AGENTS, SUBMINDS, TOOLS, ENVIRONMENT), their subsections, as well as previously created reasoning nodes. Directly reference relevant section headers by name (e.g., "FEED" or "GOAL_TREE"), specific items by id, and reasoning nodes by their id.
 - It may be effective to build up the procedure hierarchically, starting from examining basic facts, to more advanced compositional analysis, similar to writing a procedural script for a program but interpretable by you.
 - Unlike AI agents, the AMM can perform multiple independent actions simultaneously due to being multithreaded. So the REASONING_PROCEDURE can result in parallel actions, as long as they are order-independent.
+- Remember, you can use **any** format, as long as it's interpretable by you.
 IMPORTANT: The REASONING_PROCEDURE's execution must be output within the following XML tags (but content within the tags can be any format, as mentioned above):
 <reasoning-procedure>
 {reasoning_procedure}
@@ -428,7 +444,11 @@ LLM_KNOWLEDGE_CUTOFF = "August 2023"
 
 
 async def generate_mind_output(
-    goals: str, feed: str, completed_actions: int, focused_goal_id: ItemId | None
+    goals: str,
+    feed: str,
+    agent_conversation: str,
+    action_batch_number: int,
+    focused_goal_id: ItemId | None,
 ) -> str:
     """Generate output from AMM."""
     current_time = get_timestamp()
@@ -446,13 +466,14 @@ async def generate_mind_output(
         llm_knowledge_cutoff=LLM_KNOWLEDGE_CUTOFF,
         compute_rate=config.COMPUTE_RATE,
         current_time=current_time,
-        completed_actions=completed_actions,
+        action_batch_number=action_batch_number,
         self_description=config.SELF_DESCRIPTION,
         developer_name=config.DEVELOPER,
         goals=goals,
         feed=feed,
         max_feed_tokens=config.MAX_RECENT_FEED_TOKENS,
         max_memory_tokens=MAX_MEMORY_TOKENS,
+        opened_agent_conversation=agent_conversation,
     )
     instructions = dedent_and_strip(INSTRUCTIONS).replace(
         "{focused_goal}", str(focused_goal_id)
@@ -461,11 +482,12 @@ async def generate_mind_output(
         SystemMessage(content=context),
         HumanMessage(content=instructions),
     ]
+    print(f"{PROMPT_COLOR}{format_messages(messages)}{Fore.RESET}")
     breakpoint()
     return await query_model(
         messages=messages,
-        color=Fore.GREEN,
-        preamble=format_messages(messages),
+        color=AGENT_COLOR,
+        # preamble=format_messages(messages),
         stream=True,
     )
 
@@ -533,32 +555,32 @@ class RunState:
         self.set_and_save("output", value)
 
     @property
-    def action_event(self) -> MutableMapping[str, Any] | None:
+    def call_events(self) -> Sequence[MutableMapping[str, Any]]:
         """Get the action event from state."""
-        return self.state.get("action_event")
+        return self.state.get("action_event", [])
 
-    @action_event.setter
-    def action_event(self, value: MutableMapping[str, Any]) -> None:
+    @call_events.setter
+    def call_events(self, value: Sequence[MutableMapping[str, Any]]) -> None:
         """Set the action event to state."""
         self.set_and_save("action_event", value)
 
     @property
-    def call_result(self) -> str | None:
+    def call_results(self) -> dict[str, Any]:
         """Get the call result from state."""
-        return self.state.get("call_result")
+        return self.state.get("call_result", {})
 
-    @call_result.setter
-    def call_result(self, value: str) -> None:
+    @call_results.setter
+    def call_results(self, value: dict[str, Any]) -> None:
         """Set the call result to state."""
         self.set_and_save("call_result", value)
 
     @property
-    def call_result_event(self) -> MutableMapping[str, Any] | None:
+    def call_result_events(self) -> Sequence[MutableMapping[str, Any]]:
         """Get the call result event from state."""
-        return self.state.get("call_result_event")
+        return self.state.get("call_result_event", [])
 
-    @call_result_event.setter
-    def call_result_event(self, value: MutableMapping[str, Any]) -> None:
+    @call_result_events.setter
+    def call_result_events(self, value: Sequence[MutableMapping[str, Any]]) -> None:
         """Set the call result event to state."""
         self.set_and_save("call_result_event", value)
 
@@ -628,21 +650,15 @@ def extract_output_sections(output: str) -> tuple[str, str]:
 
 def extract_output(
     output: str, completed_actions: int, new_events: int
-) -> tuple[MutableMapping[str, Any], MutableMapping[str, Any], str]:
+) -> tuple[MutableMapping[str, Any], Sequence[MutableMapping[str, Any]]]:
     """Extract the output sections."""
     try:
-        feed_review, function_call_raw = extract_output_sections(output)  # type: ignore
+        feed_review, function_calls_raw = extract_output_sections(output)  # type: ignore
     except ExtractionError as e:
         raise NotImplementedError("TODO: Implement error output flow.") from e
     feed_review = from_yaml_str(feed_review)  # type: ignore
-    system_function_calls = from_yaml_str(function_call_raw)  # type: ignore
-    # if completed_actions:
-    #     raise NotImplementedError(
-    #         "TODO: Check if there is a summary for last action."
-    #     )
-    # if new_events:
-    #     raise NotImplementedError("TODO: check there are summaries for new events.")
-    return feed_review, system_function_calls, function_call_raw  # type: ignore
+    system_function_calls = from_yaml_str(function_calls_raw)  # type: ignore
+    return feed_review, system_function_calls  # type: ignore
 
 
 async def call_system_function(call_args: Mapping[str, Any]) -> str:
@@ -680,12 +696,12 @@ async def call_system_function(call_args: Mapping[str, Any]) -> str:
 
 
 def update_new_events(
-    last_function_call: FunctionCallEvent,
-    events_since_call: Sequence[Event],
+    last_function_calls: Sequence[FunctionCallEvent],
+    events_since_calls: Sequence[Event],
     feed_review: Mapping[str, Any],
 ) -> Literal[True]:
     """Update the new events info from the feed review."""
-    for event in events_since_call:
+    for event in events_since_calls:
         assert not isinstance(event, FunctionCallEvent)
         event_review = next(
             (
@@ -696,11 +712,18 @@ def update_new_events(
             None,
         )
         event.summary = event_review["summary"] if event_review else ""
-    
-    raise NotImplementedError("TODO: implement multiple action outcomes")
-    if (action_success := feed_review["action_batch_outcomes"]["action_success"]) in [-1, 1]:
-        last_function_call.success = action_success
-    return save_events([last_function_call, *events_since_call])
+    for call in last_function_calls:
+        call_success = next(
+            (
+                outcome["action_success"]
+                for outcome in feed_review["action_batch_outcomes"]
+                if outcome["function_call_id"] == str(call.id)
+            ),
+            None,
+        )
+        if call_success in [-1, 1]:
+            call.success = call_success # type: ignore
+    return save_events([*last_function_calls, *events_since_calls])
 
 
 def increment_action_number() -> Literal[True]:
@@ -724,39 +747,46 @@ def set_new_messages(run_state: RunState) -> None:
 
 async def run_mind() -> None:
     """
-    Run the AMM for one round.
-    We do NOT loop this; the AMM has an action rate that determines how often it can act, which is controlled separately.
+    Run the AMM for one action batch.
+    We do NOT loop this; the AMM has an action rate that determines how often it can act, which is controlled separately via a scheduler.
     """
-    action_batch_number = config.GLOBAL_STATE["action_batch_number"]
+    action_batch_number = config.ACTION_BATCH_NUMBER
     completed_actions = action_batch_number - 1
     run_state = RunState(state_file=config.RUN_STATE_FILE)
     set_new_messages(run_state)
     goals = Goals(config.GOALS_DIRECTORY)
     feed = Feed(config.EVENTS_DIRECTORY)
+    agent_conversation = None
     run_state.output = run_state.output or await generate_mind_output(
-        goals=goals.format(),
+        goals=goals.format() or "None",
         feed=feed.format(
             focused_goal=goals.focused, parent_goal_id=goals.focused_parent
-        ),
-        completed_actions=completed_actions,
+        )
+        or "None",
+        agent_conversation=agent_conversation or "None",
+        action_batch_number=action_batch_number,
         focused_goal_id=goals.focused,
     )
     call_event_batch = feed.call_event_batch()
-    if completed_actions:
-
-        breakpoint()
-        last_function_batch = call_event_batch[0]
-        assert isinstance(last_function_batch, FunctionCallEvent)
-        events_since_call = call_event_batch[1:]
-        raise NotImplementedError("TODO: Implement multiple function calls.")
-    else:
-        last_function_batch = None
-        events_since_call = []
+    # if completed_actions:
+        # last_function_batch = call_event_batch[0]
+        # assert isinstance(last_function_batch, FunctionCallEvent)
+    last_function_batch = [
+        event for event in call_event_batch if isinstance(event, FunctionCallEvent)
+    ]
+    events_since_call = [
+        event
+        for event in call_event_batch
+        if not isinstance(event, FunctionCallEvent)
+    ]
+    # else:
+    #     last_function_batch = None
+    #     events_since_call = []
     # last_function_call = call_event_batch[0]
     # assert isinstance(last_function_call, FunctionCallEvent)
     # events_since_call = call_event_batch[1:] if completed_actions else []
     try:
-        feed_review, system_function_calls, function_call_raw = extract_output(
+        feed_review, system_function_calls = extract_output(
             run_state.output, completed_actions, len(events_since_call)  # type: ignore
         )
     except NotImplementedError as e:
@@ -764,39 +794,52 @@ async def run_mind() -> None:
     except Exception as e:
         raise NotImplementedError("TODO: Implement extraction error handling.") from e
 
-    # at this point we can assume that feed_review and system_function_calls have all required values; any issues that happen beyond this point *must* be added as a check to `extract_output` above so that it get handled earlier
+    # at this point we can assume that feed_review and system_function_calls have all required values; any issues that happen beyond this point *must* be added as a check to `extract_output` above so that it gets handled earlier
     # - check: all events in events_since_action have corresponding items in feed_review
     if last_function_batch:
         run_state.events_updated = run_state.events_updated or update_new_events(
             last_function_batch, events_since_call, feed_review
         )
-
-    breakpoint()
-    run_state.action_event = run_state.action_event or {
-        "id": generate_id(),
-        "timestamp": get_timestamp(),
-        "goal_id": str(goals.focused) if goals.focused else None,
-        "summary": system_function_calls["action_intention"],
-        "content": function_call_raw,
-    }
-    
-    function_call_event = FunctionCallEvent.from_mapping(run_state.action_event)  # type: ignore
-    
-    raise NotImplementedError("TODO: Implement multiple function calls.")
-    # > save progress after every function call
-    # > feed: display all items in the last set of function calls
-    run_state.call_result = run_state.call_result or await call_system_function(
-        system_function_calls
-    )
-    run_state.call_result_event = run_state.call_result_event or {
-        "id": generate_id(),
-        "timestamp": get_timestamp(),
-        "goal_id": str(goals.focused) if goals.focused else None,
-        "function_call_id": str(function_call_event.id),
-        "content": run_state.call_result,
-    }
-    call_result_event = CallResultEvent.from_mapping(run_state.call_result_event)  # type: ignore
-    new_events = [function_call_event, call_result_event]
+    run_state.call_events = run_state.call_events or [
+        {
+            "id": generate_id(),
+            "timestamp": get_timestamp(),
+            "batch_number": action_batch_number,
+            "goal_id": str(goals.focused) if goals.focused else None,
+            "summary": function_call["action_intention"],
+            "content": as_yaml_str(function_call),
+        }
+        for function_call in system_function_calls
+    ]
+    function_call_events = [
+        FunctionCallEvent.from_mapping(call_event)
+        for call_event in run_state.call_events
+    ]
+    for function_call, call_event in zip(system_function_calls, function_call_events):
+        if call_event.id in run_state.call_results:
+            continue
+        run_state.call_results = {
+            **run_state.call_results,
+            call_event.id: await call_system_function(function_call),
+        }
+    run_state.call_result_events = run_state.call_result_events or [
+        {
+            "id": generate_id(),
+            "timestamp": get_timestamp(),
+            "batch_number": action_batch_number,
+            "goal_id": str(goals.focused) if goals.focused else None,
+            "function_call_id": str(call_event.id),
+            "content": call_result,
+        }
+        for call_event, call_result in zip(
+            function_call_events, run_state.call_results.values()
+        )
+    ]
+    call_result_events = [
+        CallResultEvent.from_mapping(result_event)
+        for result_event in run_state.call_result_events
+    ]
+    new_events = [*function_call_events, *call_result_events]
     run_state.events_saved = run_state.events_saved or save_events(new_events)
     run_state.action_number_incremented = (
         run_state.action_number_incremented or increment_action_number()
@@ -808,4 +851,3 @@ async def run_mind() -> None:
 
 
 asyncio.run(run_mind())
-

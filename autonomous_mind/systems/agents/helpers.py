@@ -99,5 +99,6 @@ def new_messages_notification(
         f"{name} ({sender_id})" for sender_id, name in senders.items()
     )
     return NotificationEvent(
-        content=f"New message(s) from: {sender_names}. Use `AGENTS.read_messages` to view."
+        content=f"New message(s) from: {sender_names}. Open the conversation with the agent to view.",
+        batch_number=config.ACTION_BATCH_NUMBER - 1,
     )

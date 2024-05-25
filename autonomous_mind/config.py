@@ -33,6 +33,7 @@ CORE_MODEL = ChatAnthropic(  # type: ignore
 #     temperature=0.8, model=LLM_BACKEND, verbose=False
 # )
 DEVELOPER = CONFIG_DATA["developer"]
-SELF_DESCRIPTION = str(CONFIG_DATA["self_description"]).format(agent_name=NAME)
+SELF_DESCRIPTION = as_yaml_str(CONFIG_DATA["self_description"])
 COMPUTE_RATE = str(CONFIG_DATA["compute_rate"]).format(agent_name=NAME)
 MAX_RECENT_FEED_TOKENS = CONFIG_DATA["feed"]["max_recent_tokens"]
+ACTION_BATCH_NUMBER = GLOBAL_STATE["action_batch_number"]

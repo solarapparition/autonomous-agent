@@ -27,6 +27,7 @@ class FunctionCallEvent:
 
     goal_id: ItemId | None
     "Id of the goal this action is related to."
+    batch_number: int
     summary: str
     content: str
     type: Literal["function_call"] = "function_call"
@@ -47,8 +48,9 @@ class FunctionCallEvent:
         template = """
         id: {id}
         type: function_call
-        timestamp: {timestamp}
+        batch_number: {batch_number}
         goal_id: {goal_id}
+        timestamp: {timestamp}
         summary: |-
         {summary}
         content: |-
@@ -60,6 +62,7 @@ class FunctionCallEvent:
         return dedent_and_strip(template).format(
             id=self.id,
             goal_id=self.goal_id or "!!null",
+            batch_number=self.batch_number,
             summary=summary,
             timestamp=self.timestamp,
             content=content,
@@ -71,8 +74,9 @@ class FunctionCallEvent:
         template = """
         id: {id}
         type: function_call
-        timestamp: {timestamp}
+        batch_number: {batch_number}
         goal_id: {goal_id}
+        timestamp: {timestamp}
         summary: |-
         {summary}
         content: |-
@@ -84,6 +88,7 @@ class FunctionCallEvent:
             id=self.id,
             goal_id=self.goal_id or "!!null",
             timestamp=self.timestamp,
+            batch_number=self.batch_number,
             summary=summary,
             success=self.success,
         )
@@ -97,6 +102,7 @@ class CallResultEvent:
     "Id of the goal this call result is related to."
     function_call_id: ItemId
     "Id of the function call this result is for."
+    batch_number: int
     content: str
     type: Literal["call_result"] = "call_result"
     id: ItemId = field(default_factory=generate_id)
@@ -104,8 +110,9 @@ class CallResultEvent:
     summary: str = ""
 
     @classmethod
-    def from_mapping(cls, mapping: MutableMapping[str, Any]) -> Self:
+    def from_mapping(cls, mapping: Mapping[str, Any]) -> Self:
         """Create an event from a mapping."""
+        mapping = dict(mapping)
         mapping["id"] = ItemId(mapping["id"])
         mapping["goal_id"] = ItemId(mapping["goal_id"]) if mapping["goal_id"] else None
         mapping["timestamp"] = format_timestamp(mapping["timestamp"])
@@ -117,9 +124,10 @@ class CallResultEvent:
         template = """
         id: {id}
         type: call_result
-        timestamp: {timestamp}
-        goal_id: {goal_id}
+        batch_number: {batch_number}
         function_call_id: {function_call_id}
+        goal_id: {goal_id}
+        timestamp: {timestamp}
         summary: |-
         {summary}
         content: |-
@@ -132,6 +140,7 @@ class CallResultEvent:
             goal_id=self.goal_id or "!!null",
             timestamp=self.timestamp,
             function_call_id=self.function_call_id,
+            batch_number=self.batch_number,
             content=content,
             summary=summary,
         )
@@ -141,9 +150,10 @@ class CallResultEvent:
         template = """
         id: {id}
         type: call_result
-        timestamp: {timestamp}
-        goal_id: {goal_id}
+        batch_number: {batch_number}
         function_call_id: {function_call_id}
+        goal_id: {goal_id}
+        timestamp: {timestamp}
         summary: |-
         {summary}
         content: |-
@@ -154,6 +164,7 @@ class CallResultEvent:
             id=self.id,
             goal_id=self.goal_id or "!!null",
             timestamp=self.timestamp,
+            batch_number=self.batch_number,
             function_call_id=self.function_call_id,
             summary=summary,
         )
@@ -164,6 +175,7 @@ class NotificationEvent:
     """Notification event."""
 
     content: str
+    batch_number: int
     type: Literal["notification"] = "notification"
     id: ItemId = field(default_factory=generate_id)
     timestamp: Timestamp = field(default_factory=get_timestamp)
@@ -175,8 +187,9 @@ class NotificationEvent:
         return None
 
     @classmethod
-    def from_mapping(cls, mapping: MutableMapping[str, Any]) -> Self:
+    def from_mapping(cls, mapping: Mapping[str, Any]) -> Self:
         """Create an event from a mapping."""
+        mapping = dict(mapping)
         mapping["id"] = ItemId(mapping["id"])
         mapping["timestamp"] = format_timestamp(mapping["timestamp"])
         return cls(**mapping)
@@ -186,6 +199,7 @@ class NotificationEvent:
         template = """
         id: {id}
         type: notification
+        batch_number: {batch_number}
         timestamp: {timestamp}
         summary: |-
         {summary}
@@ -197,6 +211,7 @@ class NotificationEvent:
         return dedent_and_strip(template).format(
             id=self.id,
             timestamp=self.timestamp,
+            batch_number=self.batch_number,
             summary=summary,
             content=content,
         )
@@ -215,6 +230,7 @@ class Goal:
 
     summary: str
     details: str | None
+    batch_number: int
     parent_goal_id: ItemId | None
     id: ItemId = field(default_factory=generate_id)
     timestamp: Timestamp = field(default_factory=get_timestamp)
@@ -222,20 +238,17 @@ class Goal:
     @classmethod
     def from_mapping(cls, mapping: Mapping[str, Any]) -> Self:
         """Create a goal from a mapping."""
-        return cls(
-            id=ItemId(mapping["id"]),
-            timestamp=format_timestamp(mapping["timestamp"]),
-            summary=mapping["summary"],
-            details=mapping["details"],
-            parent_goal_id=(
-                ItemId(mapping["parent_goal_id"]) if mapping["parent_goal_id"] else None
-            ),
-        )
+        mapping = dict(mapping)
+        mapping["id"] = ItemId(mapping["id"])
+        mapping["timestamp"] = format_timestamp(mapping["timestamp"])
+        mapping["parent_goal_id"] = ItemId(mapping["parent_goal_id"]) if mapping.get("parent_goal_id") else None
+        return cls(**mapping)
 
     def __repr__(self) -> str:
         """Get the string representation of the goal."""
         template = """
         id: {id}
+        batch_number: {batch_number}
         parent_goal_id: {parent_goal_id}
         timestamp: {timestamp}
         summary: |-
@@ -248,6 +261,7 @@ class Goal:
         return dedent_and_strip(template).format(
             id=self.id,
             timestamp=self.timestamp,
+            batch_number=self.batch_number,
             summary=summary,
             details=details,
             parent_goal_id=self.parent_goal_id or "!!null",
@@ -261,6 +275,7 @@ class Goal:
         """Printout of goal."""
         template = """
         id: {id}
+        batch_number: {batch_number}
         parent_goal_id: {parent_goal_id}
         timestamp: {timestamp}
         summary: |-
@@ -272,6 +287,7 @@ class Goal:
         return dedent_and_strip(template).format(
             id=self.id,
             timestamp=self.timestamp,
+            batch_number=self.batch_number,
             summary=summary,
             parent_goal_id=self.parent_goal_id or "!!null",
         )
