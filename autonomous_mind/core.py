@@ -446,7 +446,7 @@ LLM_KNOWLEDGE_CUTOFF = "August 2023"
 async def generate_mind_output(
     goals: str,
     feed: str,
-    agent_conversation: str,
+    opened_agent_conversation: str,
     action_batch_number: int,
     focused_goal_id: ItemId | None,
 ) -> str:
@@ -473,7 +473,7 @@ async def generate_mind_output(
         feed=feed,
         max_feed_tokens=config.MAX_RECENT_FEED_TOKENS,
         max_memory_tokens=MAX_MEMORY_TOKENS,
-        opened_agent_conversation=agent_conversation,
+        opened_agent_conversation=opened_agent_conversation,
     )
     instructions = dedent_and_strip(INSTRUCTIONS).replace(
         "{focused_goal}", str(focused_goal_id)
@@ -756,6 +756,8 @@ async def run_mind() -> None:
     set_new_messages(run_state)
     goals = Goals(config.GOALS_DIRECTORY)
     feed = Feed(config.EVENTS_DIRECTORY)
+
+    raise NotImplementedError("TODO: Implement agent conversation extraction")
     agent_conversation = None
     run_state.output = run_state.output or await generate_mind_output(
         goals=goals.format() or "None",
@@ -763,7 +765,7 @@ async def run_mind() -> None:
             focused_goal=goals.focused, parent_goal_id=goals.focused_parent
         )
         or "None",
-        agent_conversation=agent_conversation or "None",
+        opened_agent_conversation=agent_conversation or "None",
         action_batch_number=action_batch_number,
         focused_goal_id=goals.focused,
     )

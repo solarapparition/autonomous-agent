@@ -1,5 +1,6 @@
 """Functions for interacting with AGENTS."""
 
+from autonomous_mind import config
 from autonomous_mind.helpers import load_yaml
 from autonomous_mind.systems.agents.helpers import (
     MessageSendingError,
@@ -26,18 +27,19 @@ def list_agents():
     raise NotImplementedError
 
 
-def read_messages(agent_id: str):
-    """Read all messages from an AGENT."""
-    record_file = get_record_file(agent_id)
-    messages = load_yaml(record_file)
-    if len(messages) <= 5:
-        return (
-            "\n\n".join(
-                [
-                    f"[{message['timestamp']}] {message['sender']}: {message['content']}"
-                    for message in messages
-                ]
-            )
-            + "\n\n (Page 1 of 1)"
-        )
-    raise NotImplementedError("TODO: Implement handling for more than 5 messages.")
+async def open_conversation(agent_id: str):
+    """Switch the OPENED_AGENT_CONVERSATION to the AGENT with the given `agent_id`. The currently open conversation will be closed."""
+    config.set_global_state("opened_agent_conversation", agent_id)
+    # record_file = get_record_file(agent_id)
+    # messages = load_yaml(record_file)
+    # if len(messages) <= 5:
+    #     return (
+    #         "\n\n".join(
+    #             [
+    #                 f"[{message['timestamp']}] {message['sender']}: {message['content']}"
+    #                 for message in messages
+    #             ]
+    #         )
+    #         + "\n\n (Page 1 of 1)"
+    #     )
+    # raise NotImplementedError("TODO: Implement handling for more than 5 messages.")

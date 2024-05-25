@@ -37,3 +37,8 @@ SELF_DESCRIPTION = as_yaml_str(CONFIG_DATA["self_description"])
 COMPUTE_RATE = str(CONFIG_DATA["compute_rate"]).format(agent_name=NAME)
 MAX_RECENT_FEED_TOKENS = CONFIG_DATA["feed"]["max_recent_tokens"]
 ACTION_BATCH_NUMBER = GLOBAL_STATE["action_batch_number"]
+
+def set_global_state(key: str, value: str) -> None:
+    """Set a global state."""
+    GLOBAL_STATE[key] = value
+    GLOBAL_STATE_FILE.write_text(as_yaml_str(GLOBAL_STATE), encoding="utf-8")
