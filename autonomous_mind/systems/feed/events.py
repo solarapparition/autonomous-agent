@@ -46,7 +46,7 @@ class Feed:
         # action_count = 0
         for event_file in reversed(self.event_files):
             event = read_event(event_file)
-            if config.ACTION_BATCH_NUMBER - event.batch_number > action_batch_limit:
+            if config.action_batch_number() - event.batch_number > action_batch_limit:
                 break
             events.insert(0, event)
             # if isinstance(event, FunctionCallEvent):
@@ -68,7 +68,7 @@ class Feed:
         for file in reversed(self.event_files):
             event = read_event(file)
             # we represent the event differently depending on various conditions
-            batch_recency = config.ACTION_BATCH_NUMBER - event.batch_number
+            batch_recency = config.action_batch_number() - event.batch_number
             goal_unrelated = (
                 event.goal_id != focused_goal
                 or (parent_goal_id and event.goal_id != parent_goal_id)

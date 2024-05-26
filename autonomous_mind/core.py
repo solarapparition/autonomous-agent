@@ -48,6 +48,7 @@ from autonomous_mind.systems.goal import functions as goal_functions
 from autonomous_mind.systems.memory import functions as memory_functions
 from autonomous_mind.systems.agents import functions as agent_functions
 from autonomous_mind.systems.environment import functions as environment_functions
+from autonomous_mind.systems.agents.helpers import read_agent_conversation
 
 AGENT_COLOR = Fore.GREEN
 PROMPT_COLOR = Fore.BLUE
@@ -151,14 +152,15 @@ None
 MEMORY_NODES are can be interacted with through FUNCTIONS for that SYSTEM.
 
 <system-functions system="MEMORY">
-- function: save_note_memory_node
+- function: save_note
   signature: |-
-    async def save_note_memory_node(content: str, context: str, summary: str, load_to_memory: bool = True):
+    async def save_note(content: str, context: str, summary: str, load_to_memory: bool = True):
         """
-        Save a new NOTE MEMORY_NODE with the given `content`.
+        Save a new NOTE with the given `content`.
         `context` adds context that might not be obvious from just the `content`.
         `summary` should be no more than a sentence.
-        `load_to_memory` determines whether the node should be immediately loaded into the MEMORY section or not.
+        `goal_id` is the id of the goal that this note is related to. If None, the note is just a general note.
+        `load_to_memory` determines whether the note should be immediately loaded into the MEMORY section or not.
         """
 - function: search_memories
   signature: |-
@@ -722,7 +724,7 @@ def update_new_events(
             None,
         )
         if call_success in [-1, 1]:
-            call.success = call_success # type: ignore
+            call.success = call_success  # type: ignore
     return save_events([*last_function_calls, *events_since_calls])
 
 
@@ -750,15 +752,18 @@ async def run_mind() -> None:
     Run the AMM for one action batch.
     We do NOT loop this; the AMM has an action rate that determines how often it can act, which is controlled separately via a scheduler.
     """
-    action_batch_number = config.ACTION_BATCH_NUMBER
+    action_batch_number = config.action_batch_number()
     completed_actions = action_batch_number - 1
     run_state = RunState(state_file=config.RUN_STATE_FILE)
     set_new_messages(run_state)
     goals = Goals(config.GOALS_DIRECTORY)
     feed = Feed(config.EVENTS_DIRECTORY)
-
-    raise NotImplementedError("TODO: Implement agent conversation extraction")
-    agent_conversation = None
+    opened_agent_conversation = config.opened_agent_conversation()
+    agent_conversation = (
+        read_agent_conversation(ItemId(opened_agent_conversation))
+        if opened_agent_conversation
+        else None
+    )
     run_state.output = run_state.output or await generate_mind_output(
         goals=goals.format() or "None",
         feed=feed.format(
@@ -771,15 +776,13 @@ async def run_mind() -> None:
     )
     call_event_batch = feed.call_event_batch()
     # if completed_actions:
-        # last_function_batch = call_event_batch[0]
-        # assert isinstance(last_function_batch, FunctionCallEvent)
+    # last_function_batch = call_event_batch[0]
+    # assert isinstance(last_function_batch, FunctionCallEvent)
     last_function_batch = [
         event for event in call_event_batch if isinstance(event, FunctionCallEvent)
     ]
     events_since_call = [
-        event
-        for event in call_event_batch
-        if not isinstance(event, FunctionCallEvent)
+        event for event in call_event_batch if not isinstance(event, FunctionCallEvent)
     ]
     # else:
     #     last_function_batch = None

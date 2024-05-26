@@ -19,7 +19,7 @@ def add_goal(summary: str, details: str | None, parent_goal_id: str | None = Non
     If `switch_focus` is True, then the new goal will automatically become the FOCUSED goal.
     """
     goal = Goal(
-        batch_number=config.ACTION_BATCH_NUMBER,
+        batch_number=config.action_batch_number(),
         timestamp=get_timestamp(),
         summary=summary,
         details=details,

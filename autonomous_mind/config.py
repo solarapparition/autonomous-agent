@@ -1,16 +1,16 @@
 """Configuration loader."""
 
 from pathlib import Path
+from typing import Any, MutableMapping
 
 from langchain_anthropic import ChatAnthropic
-# from langchain_openai import ChatOpenAI
 
 from autonomous_mind.helpers import as_yaml_str, load_yaml
 
 CONFIG_FILE = Path("data/config.yaml")
 CONFIG_DATA = load_yaml(CONFIG_FILE)
 GLOBAL_STATE_FILE = Path("data/global_state.yaml")
-GLOBAL_STATE = load_yaml(GLOBAL_STATE_FILE)
+GLOBAL_STATE: MutableMapping[str, Any] = load_yaml(GLOBAL_STATE_FILE)
 RUN_STATE_DIRECTORY = Path("data/run_state")
 RUN_STATE_FILE = RUN_STATE_DIRECTORY / "current.yaml"
 RUN_STATE_DIRECTORY.mkdir(parents=True, exist_ok=True)
@@ -29,16 +29,24 @@ LLM_BACKEND = CONFIG_DATA["llm_backend"]
 CORE_MODEL = ChatAnthropic(  # type: ignore
     temperature=0.8, model=LLM_BACKEND, verbose=False, max_tokens_to_sample=4096  # type: ignore
 )
-# CORE_MODEL = ChatOpenAI(
-#     temperature=0.8, model=LLM_BACKEND, verbose=False
-# )
 DEVELOPER = CONFIG_DATA["developer"]
 SELF_DESCRIPTION = as_yaml_str(CONFIG_DATA["self_description"])
 COMPUTE_RATE = str(CONFIG_DATA["compute_rate"]).format(agent_name=NAME)
 MAX_RECENT_FEED_TOKENS = CONFIG_DATA["feed"]["max_recent_tokens"]
-ACTION_BATCH_NUMBER = GLOBAL_STATE["action_batch_number"]
+OPENED_AGENT_CONVERSATION = GLOBAL_STATE.get("opened_agent_conversation")
+
 
 def set_global_state(key: str, value: str) -> None:
     """Set a global state."""
     GLOBAL_STATE[key] = value
     GLOBAL_STATE_FILE.write_text(as_yaml_str(GLOBAL_STATE), encoding="utf-8")
+
+
+def action_batch_number() -> int:
+    """Get the current action batch number."""
+    return GLOBAL_STATE["action_batch_number"]
+
+
+def opened_agent_conversation() -> str | None:
+    """Get the current opened agent conversation."""
+    return GLOBAL_STATE["opened_agent_conversation"]

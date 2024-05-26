@@ -100,5 +100,21 @@ def new_messages_notification(
     )
     return NotificationEvent(
         content=f"New message(s) from: {sender_names}. Open the conversation with the agent to view.",
-        batch_number=config.ACTION_BATCH_NUMBER - 1,
+        batch_number=config.action_batch_number() - 1,
     )
+
+def read_agent_conversation(agent_id: ItemId) -> str:
+    """Read the conversation with an agent."""
+    record_file = get_record_file(agent_id)
+    messages = load_yaml(record_file)
+    if len(messages) <= 5:
+        return (
+            "\n\n".join(
+                [
+                    f"[{message['timestamp']}] {message['sender']}: {message['content']}"
+                    for message in messages
+                ]
+            )
+            + "\n\n (Page 1 of 1)"
+        )
+    raise NotImplementedError("TODO: Implement handling for more than 5 messages.")

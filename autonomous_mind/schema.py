@@ -241,7 +241,9 @@ class Goal:
         mapping = dict(mapping)
         mapping["id"] = ItemId(mapping["id"])
         mapping["timestamp"] = format_timestamp(mapping["timestamp"])
-        mapping["parent_goal_id"] = ItemId(mapping["parent_goal_id"]) if mapping.get("parent_goal_id") else None
+        mapping["parent_goal_id"] = (
+            ItemId(mapping["parent_goal_id"]) if mapping.get("parent_goal_id") else None
+        )
         return cls(**mapping)
 
     def __repr__(self) -> str:
@@ -290,6 +292,81 @@ class Goal:
             batch_number=self.batch_number,
             summary=summary,
             parent_goal_id=self.parent_goal_id or "!!null",
+        )
+
+
+@dataclass
+class Note:
+    """A note."""
+
+    content: str
+    context: str
+    batch_number: int
+    summary: str = ""
+    id: ItemId = field(default_factory=generate_id)
+    goal_id: ItemId | None = None
+    timestamp: Timestamp = field(default_factory=get_timestamp)
+
+    @classmethod
+    def from_mapping(cls, mapping: Mapping[str, Any]) -> Self:
+        """Create a memory node from a mapping."""
+        mapping = dict(mapping)
+        mapping["id"] = ItemId(mapping["id"])
+        mapping["timestamp"] = format_timestamp(mapping["timestamp"])
+        return cls(**mapping)
+
+    def __repr__(self) -> str:
+        """Get the string representation of the memory node."""
+        template = """
+        id: {id}
+        type: note
+        batch_number: {batch_number}
+        goal_id: {goal_id}
+        timestamp: {timestamp}
+        summary: |-
+        {summary}
+        context: |-
+        {context}
+        content: |-
+        {content}
+        """
+        summary = indent(self.summary, "  ")
+        context = indent(self.context, "  ")
+        content = indent(self.content, "  ")
+        return dedent_and_strip(template).format(
+            id=self.id,
+            timestamp=self.timestamp,
+            batch_number=self.batch_number,
+            summary=summary,
+            context=context,
+            content=content,
+            goal_id=self.goal_id or "!!null",
+        )
+
+    def __str__(self) -> str:
+        """Printout of memory node."""
+        template = """
+        id: {id}
+        type: note
+        batch_number: {batch_number}
+        goal_id: {goal_id}
+        timestamp: {timestamp}
+        summary: |-
+        {summary}
+        context: |-
+        {context}
+        content: |-
+          [Collapsed]
+        """
+        summary = indent(self.summary, "  ")
+        context = indent(self.context, "  ")
+        return dedent_and_strip(template).format(
+            id=self.id,
+            timestamp=self.timestamp,
+            batch_number=self.batch_number,
+            summary=summary,
+            context=context,
+            goal_id=self.goal_id or "!!null",
         )
 
 
