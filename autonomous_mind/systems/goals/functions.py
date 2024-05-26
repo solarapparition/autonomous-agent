@@ -7,7 +7,7 @@ from autonomous_mind.helpers import get_timestamp
 from autonomous_mind.id_generation import generate_id
 from autonomous_mind.schema import Goal, ItemId
 from autonomous_mind.systems.config.global_state import set_global_state
-from autonomous_mind.systems.goal.helpers import save_goals
+from autonomous_mind.systems.goals.helpers import save_goals
 from autonomous_mind.text import dedent_and_strip
 
 

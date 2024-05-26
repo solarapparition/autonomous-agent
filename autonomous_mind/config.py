@@ -49,7 +49,7 @@ def action_batch_number() -> int:
     return GLOBAL_STATE["action_batch_number"]
 
 
-def opened_agent_conversation() -> str | None:
+def opened_agent_conversation() -> int | None:
     """Get the current opened agent conversation."""
     return GLOBAL_STATE.get("opened_agent_conversation")
 

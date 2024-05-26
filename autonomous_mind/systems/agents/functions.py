@@ -29,5 +29,6 @@ def list_agents():
 
 async def open_conversation(agent_id: str):
     """Switch the OPENED_AGENT_CONVERSATION to the AGENT with the given `agent_id`. The currently open conversation will be closed."""
+    previous_agent_id = config.opened_agent_conversation()
     config.set_global_state("opened_agent_conversation", agent_id)
-    return f"AGENT_SYSTEM: Opened conversation with agent {agent_id}."
+    return f"AGENT_SYSTEM: Opened conversation with agent {agent_id}. Closed conversation with agent {previous_agent_id}."

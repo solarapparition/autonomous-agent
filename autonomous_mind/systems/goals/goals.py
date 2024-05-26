@@ -1,3 +1,5 @@
+"""Goal system for the Mind."""
+
 from dataclasses import dataclass
 from functools import cached_property
 from pathlib import Path
@@ -6,7 +8,7 @@ from autonomous_mind import config
 from autonomous_mind.helpers import as_yaml_str
 from autonomous_mind.printout import full_itemized_repr, short_itemized_repr
 from autonomous_mind.schema import ItemId
-from autonomous_mind.systems.goal.helpers import find_goal, read_goal, reorder_goals
+from autonomous_mind.systems.goals.helpers import find_goal, read_goal, reorder_goals
 
 
 @dataclass

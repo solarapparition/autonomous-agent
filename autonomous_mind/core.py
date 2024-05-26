@@ -29,8 +29,8 @@ from autonomous_mind.systems.agents.helpers import (
     new_messages_notification,
 )
 from autonomous_mind.systems.feed.events import Feed, read_event, save_events
-from autonomous_mind.systems.goal.goals import Goals
-from autonomous_mind.systems.goal.helpers import read_goal
+from autonomous_mind.systems.goals.goals import Goals
+from autonomous_mind.systems.goals.helpers import read_goal
 from autonomous_mind.text import ExtractionError, dedent_and_strip, extract_and_unpack
 from autonomous_mind.helpers import (
     LONG_STR_YAML,
@@ -44,7 +44,7 @@ from autonomous_mind.helpers import (
     get_machine_info,
 )
 from autonomous_mind.systems.config import functions as config_functions
-from autonomous_mind.systems.goal import functions as goal_functions
+from autonomous_mind.systems.goals import functions as goals_functions
 from autonomous_mind.systems.memory import functions as memory_functions
 from autonomous_mind.systems.agents import functions as agent_functions
 from autonomous_mind.systems.environment import functions as environment_functions
@@ -99,7 +99,7 @@ General information about {mind_name}'s current state.
         """
 </system-functions>
 
-## GOAL_SYSTEM
+## GOALS_SYSTEM
 Manages {mind_name}'s goals.
 
 ### GOAL_TREE
@@ -111,13 +111,13 @@ This section contains {mind_name}'s current goals, listed in an order resembling
 <goals>
 {goals}
 </goals>
-These goals are autonomously determined by {mind_name}, and can be interacted with through the GOAL_SYSTEM_FUNCTION.
+These goals are autonomously determined by {mind_name}, and can be interacted with through the GOALS_SYSTEM_FUNCTIONS.
 
-### GOAL_SYSTEM_FUNCTIONS
+### GOALS_SYSTEM_FUNCTIONS
 <system-functions system="GOAL">
 - function: add_goal
   signature: |-
-    async def add_goal(summary: str, details: str, parent_goal_id: str | None = None, switch_focus: bool = True):
+    async def add_goal(summary: str, details: str, parent_goal_id: int | None = None, switch_focus: bool = True):
         """
         `summary` should be no more than a sentence.
         `details` should only be provided if the goal requires more explanation than can be given in the `summary`.
@@ -134,7 +134,7 @@ These goals are autonomously determined by {mind_name}, and can be interacted wi
         """Switch the FOCUSED_GOAL to the goal with the given `id`. **Note**: this can cause the FOCUSED_GOAL and/or its parent chain to become hidden in the GOALS section. See the display rules there for more information."""
 - function: edit_goal
   signature: |-
-    async def edit_goal(id: str, new_summary: str | None, new_details: str | None, new_parent_goal_id: str | None):
+    async def edit_goal(id: int, new_summary: str | None, new_details: str | None, new_parent_goal_id: int | None):
         """Edit a goal with the given `id`. Any parameter set to None will not be changed."""
 </system-functions>
 
@@ -154,7 +154,7 @@ MEMORY_NODES are can be interacted with through FUNCTIONS for that SYSTEM.
 <system-functions system="MEMORY">
 - function: create_note
   signature: |-
-    async def create_note(content: str, context: str, summary: str, load_to_memory: bool = True):
+    async def create_note(content: str, context: str, summary: str, goal_id: int | None = None, load_to_memory: bool = True):
         """
         Create a new NOTE with the given `content`.
         `context` adds context that might not be obvious from just the `content`.
@@ -164,15 +164,15 @@ MEMORY_NODES are can be interacted with through FUNCTIONS for that SYSTEM.
         """
 - function: search_memories
   signature: |-
-    async def search(by: Literal["id", "keywords", "semantic_embedding"], query: str):
+    async def search_memories(by: Literal["id", "keywords", "semantic_embedding"], query: str):
         """
-        Search for an item (GOAL, EVENT, AGENT, etc.) by various means. Can be used to find items that are hidden, or view the contents of collapsed items.
+        Search for an item (GOALS, EVENT, AGENT, etc.) by various means. Can be used to find items that are hidden, or view the contents of collapsed items.
         `query`'s meaning will change depending on the `by` parameter.
         """
         raise NotImplementedError
 - function: refresh_memory
   signature: |-
-    async def refresh_memory(memory_id: str):
+    async def refresh_memory(memory_id: int):
         """Refresh a MEMORY_NODE with the given `memory_id`. This will update its expiry timestamp to the current time, and bring it to the top of the list."""
 </system-functions>
 
@@ -197,7 +197,7 @@ FEED items are automatically populated by the FEED_SYSTEM, and can be interacted
 <system-functions system="FEED">
 - function: add_reminder
   signature: |-
-    async def add_reminder(goal_id: str | None, content: str, mode: Literal["until", "day", "hour", "minute", "second"], time: str | int, repeat: bool = False):
+    async def add_reminder(goal_id: int | None, content: str, mode: Literal["until", "day", "hour", "minute", "second"], time: str | int, repeat: bool = False):
         """
         Add a reminder in the FEED. When the reminder triggers, an event with the reminder's `content` will be added to the FEED.
         If `goal_id` is provided, the reminder will be associated with that goal, otherwise it will be a general reminder.
@@ -211,6 +211,8 @@ Handles communication with AGENTS—entities capable of acting on their own.
 
 ### OPENED_AGENT_CONVERSATION
 An ongoing conversation with an AGENT. {mind_name} can only have one conversation open at a time.
+
+Currently Open Agent Id: {opened_agent_id}
 <opened-agent-conversation>
 {opened_agent_conversation}
 </opened-agent-conversation>
@@ -234,9 +236,9 @@ This is a list of AGENTS that {mind_name} has recently interacted with.
 
 ### AGENTS_SYSTEM_FUNCTIONS
 <system-functions system="AGENTS">
-- function: open_conversation(agent_id: str)
+- function: open_conversation(agent_id: int)
   signature: |-
-    async def open_conversation(agent_id: str):
+    async def open_conversation(agent_id: int):
         """Switch the OPENED_AGENT_CONVERSATION to the AGENT with the given `agent_id`. The currently open conversation will be closed."""
 - function: message_agent
   signature: |-
@@ -396,7 +398,7 @@ action_batch_outcomes:
 Suggestions for the REASONING_PROCEDURE:
 - Use whatever structure is most comfortable, but it should allow arbitrary nesting levels to enable deep analysis—common choices include YAML, pseudocode, Mermaid, pseudo-XML, JSON, or novel combinations of these. The key is to densely represent meaning and reasoning.
 - Include unique ids for nodes of the tree to allow for references and to jump back and fourth between parts of the process. Freely reference those ids to allow for a complex, interconnected reasoning process.
-- The REASONING_PROCEDURE should synthesize and reference information from all SYSTEMS above (CONFIG, GOAL, MEMORY, FEED, AGENTS, SUBMINDS, TOOLS, ENVIRONMENT), their subsections, as well as previously created reasoning nodes. Directly reference relevant section headers by name (e.g., "FEED" or "GOAL_TREE"), specific items by id, and reasoning nodes by their id.
+- The REASONING_PROCEDURE should synthesize and reference information from all SYSTEMS above (CONFIG, GOALS, MEMORY, FEED, AGENTS, SUBMINDS, TOOLS, ENVIRONMENT), their subsections, as well as previously created reasoning nodes. Directly reference relevant section headers by name (e.g., "FEED" or "GOAL_TREE"), specific items by id, and reasoning nodes by their id.
 - It may be effective to build up the procedure hierarchically, starting from examining basic facts, to more advanced compositional analysis, similar to writing a procedural script for a program but interpretable by you.
 - Unlike AI agents, the AMM can perform multiple independent actions simultaneously due to being multithreaded. So the REASONING_PROCEDURE can result in parallel actions, as long as they are order-independent.
 - Remember, you can use **any** format, as long as it's interpretable by you.
@@ -447,6 +449,7 @@ LLM_KNOWLEDGE_CUTOFF = "August 2023"
 async def generate_mind_output(
     goals: str,
     feed: str,
+    opened_agent_id: int | None,
     opened_agent_conversation: str,
     action_batch_number: int,
     focused_goal_id: ItemId | None,
@@ -474,6 +477,7 @@ async def generate_mind_output(
         feed=feed,
         max_feed_tokens=config.MAX_RECENT_FEED_TOKENS,
         max_memory_tokens=MAX_MEMORY_TOKENS,
+        opened_agent_id=opened_agent_id,
         opened_agent_conversation=opened_agent_conversation,
     )
     instructions = dedent_and_strip(INSTRUCTIONS).replace(
@@ -666,7 +670,7 @@ async def call_system_function(call_args: Mapping[str, Any]) -> str:
     """Call a system function."""
     system_mapping = {
         "CONFIG": config_functions,
-        "GOAL": goal_functions,
+        "GOALS": goals_functions,
         "MEMORY": memory_functions,
         "AGENTS": agent_functions,
         "ENVIRONMENT": environment_functions,
@@ -757,10 +761,10 @@ async def run_mind() -> None:
     set_new_messages(run_state)
     goals = Goals(config.GOALS_DIRECTORY)
     feed = Feed(config.EVENTS_DIRECTORY)
-    opened_agent_conversation = config.opened_agent_conversation()
+    opened_agent_id = config.opened_agent_conversation()
     agent_conversation = (
-        read_agent_conversation(ItemId(opened_agent_conversation))
-        if opened_agent_conversation
+        read_agent_conversation(ItemId(opened_agent_id))
+        if opened_agent_id is not None
         else None
     )
     run_state.output = run_state.output or await generate_mind_output(
@@ -769,6 +773,7 @@ async def run_mind() -> None:
             focused_goal=goals.focused, parent_goal_id=goals.focused_parent
         )
         or "None",
+        opened_agent_id=opened_agent_id,
         opened_agent_conversation=agent_conversation or "None",
         action_batch_number=action_batch_number,
         focused_goal_id=goals.focused,
