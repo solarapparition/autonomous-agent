@@ -7,6 +7,7 @@ from typing import Mapping
 from autonomous_mind import config
 from autonomous_mind.config import AGENTS_DIRECTORY
 from autonomous_mind.helpers import get_timestamp, load_yaml
+from autonomous_mind.id_generation import generate_id
 from autonomous_mind.schema import ItemId, NotificationEvent
 
 
@@ -99,8 +100,9 @@ def new_messages_notification(
         f"{name} ({sender_id})" for sender_id, name in senders.items()
     )
     return NotificationEvent(
+        id=generate_id(),
         content=f"New message(s) from: {sender_names}. Open the conversation with the agent to view.",
-        batch_number=config.action_batch_number() - 1,
+        batch_number=config.action_batch_number(),
     )
 
 def read_agent_conversation(agent_id: ItemId) -> str:

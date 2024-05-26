@@ -3,7 +3,6 @@
 from dataclasses import dataclass, field
 from textwrap import indent
 from typing import Any, Literal, Mapping, MutableMapping, NewType, Self
-from uuid import uuid4
 
 from autonomous_mind.helpers import (
     Timestamp,
@@ -13,12 +12,7 @@ from autonomous_mind.helpers import (
 )
 from autonomous_mind.text import dedent_and_strip
 
-ItemId = NewType("ItemId", str)
-
-
-def generate_id() -> ItemId:
-    """Generate a unique identifier."""
-    return ItemId(str(uuid4()))
+ItemId = NewType("ItemId", int)
 
 
 @dataclass
@@ -30,8 +24,8 @@ class FunctionCallEvent:
     batch_number: int
     summary: str
     content: str
+    id: ItemId
     type: Literal["function_call"] = "function_call"
-    id: ItemId = field(default_factory=generate_id)
     timestamp: Timestamp = field(default_factory=get_timestamp)
     success: Literal[-1, 0, 1] = 0
 
@@ -104,8 +98,8 @@ class CallResultEvent:
     "Id of the function call this result is for."
     batch_number: int
     content: str
+    id: ItemId
     type: Literal["call_result"] = "call_result"
-    id: ItemId = field(default_factory=generate_id)
     timestamp: Timestamp = field(default_factory=get_timestamp)
     summary: str = ""
 
@@ -176,8 +170,8 @@ class NotificationEvent:
 
     content: str
     batch_number: int
+    id: ItemId
     type: Literal["notification"] = "notification"
-    id: ItemId = field(default_factory=generate_id)
     timestamp: Timestamp = field(default_factory=get_timestamp)
     summary: str = ""
 
@@ -232,7 +226,7 @@ class Goal:
     details: str | None
     batch_number: int
     parent_goal_id: ItemId | None
-    id: ItemId = field(default_factory=generate_id)
+    id: ItemId
     timestamp: Timestamp = field(default_factory=get_timestamp)
 
     @classmethod
@@ -302,8 +296,8 @@ class Note:
     content: str
     context: str
     batch_number: int
+    id: ItemId
     summary: str = ""
-    id: ItemId = field(default_factory=generate_id)
     goal_id: ItemId | None = None
     timestamp: Timestamp = field(default_factory=get_timestamp)
 

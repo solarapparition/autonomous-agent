@@ -4,6 +4,7 @@
 
 from autonomous_mind import config
 from autonomous_mind.helpers import get_timestamp
+from autonomous_mind.id_generation import generate_id
 from autonomous_mind.schema import Goal, ItemId
 from autonomous_mind.systems.config.global_state import set_global_state
 from autonomous_mind.systems.goal.helpers import save_goals
@@ -19,6 +20,7 @@ def add_goal(summary: str, details: str | None, parent_goal_id: str | None = Non
     If `switch_focus` is True, then the new goal will automatically become the FOCUSED goal.
     """
     goal = Goal(
+        id=generate_id(),
         batch_number=config.action_batch_number(),
         timestamp=get_timestamp(),
         summary=summary,

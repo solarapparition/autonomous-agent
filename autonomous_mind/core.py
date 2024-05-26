@@ -16,13 +16,13 @@ from langchain_core.messages import HumanMessage, SystemMessage
 import toml
 
 from autonomous_mind import config
+from autonomous_mind.id_generation import generate_id
 from autonomous_mind.models import format_messages, query_model
 from autonomous_mind.schema import (
     CallResultEvent,
     Event,
     FunctionCallEvent,
     ItemId,
-    generate_id,
 )
 from autonomous_mind.systems.agents.helpers import (
     download_new_messages,
@@ -93,7 +93,7 @@ General information about {mind_name}'s current state.
   signature: |-
     def modify_self_description(key_path: tuple[str | int], mode: Literal["add_or_update", "delete"], value: JSONSerializable | "TBD" | None):
         """
-        Modify {mind_name}'s self-description with additional, **permanent** information about their identity, to help it remain consistent over long time horizons.
+        Modify {mind_name}'s self-description with additional, **permanent** information about her/his/their identity, to help them remain consistent over long time horizons.
         - the self-description is a YAML structure that can be modified by adding, updating, or deleting keys.
         - `key_path` is used to traverse the YAML structure to the desired key.
         """

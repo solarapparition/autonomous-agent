@@ -57,3 +57,13 @@ def opened_agent_conversation() -> str | None:
 def loaded_notes() -> list[str]:
     """Get the current loaded notes."""
     return GLOBAL_STATE.get("loaded_notes", [])
+
+
+def last_id() -> int:
+    """Get the last id."""
+    return GLOBAL_STATE.get("last_id", 0)
+
+
+def update_last_id(new_id: int) -> None:
+    """Update the last id."""
+    set_global_state("last_id", new_id)
