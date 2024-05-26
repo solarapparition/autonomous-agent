@@ -28,6 +28,7 @@ def add_goal(summary: str, details: str | None, parent_goal_id: str | None = Non
     save_goals([goal])
     set_global_state("focused_goal_id", str(goal.id))
     confirmation = f"""
+    GOAL_SYSTEM:
     - GOAL added:
         id: {goal.id}
         summary: {goal.summary}

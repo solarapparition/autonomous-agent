@@ -152,11 +152,11 @@ None
 MEMORY_NODES are can be interacted with through FUNCTIONS for that SYSTEM.
 
 <system-functions system="MEMORY">
-- function: save_note
+- function: create_note
   signature: |-
-    async def save_note(content: str, context: str, summary: str, load_to_memory: bool = True):
+    async def create_note(content: str, context: str, summary: str, load_to_memory: bool = True):
         """
-        Save a new NOTE with the given `content`.
+        Create a new NOTE with the given `content`.
         `context` adds context that might not be obvious from just the `content`.
         `summary` should be no more than a sentence.
         `goal_id` is the id of the goal that this note is related to. If None, the note is just a general note.
@@ -234,14 +234,14 @@ This is a list of AGENTS that {mind_name} has recently interacted with.
 
 ### AGENTS_SYSTEM_FUNCTIONS
 <system-functions system="AGENTS">
-- function: message_agent
-  signature: |-
-    async def message_agent(agent_id: str, message: str):
-        """Send a message to an AGENT with the given `agent_id`. Can send messages to self."""
 - function: open_conversation(agent_id: str)
   signature: |-
     async def open_conversation(agent_id: str):
         """Switch the OPENED_AGENT_CONVERSATION to the AGENT with the given `agent_id`. The currently open conversation will be closed."""
+- function: message_agent
+  signature: |-
+    async def message_agent(message: str):
+        """Send a message to the agent that is currently open in the OPENED_AGENT_CONVERSATION. If no conversation is open, return an error message."""
 - function: add_to_agent_list
   signature: |-
     async def add_to_contacts(name: str, description: str):
@@ -425,13 +425,12 @@ Output each call in YAML format, within the following tags:
 For example, a call for the message_agent function would look like this:
 <system-function-calls>
 - action_reasoning: |-
-    I need to know more about agent 12345.
+    I need to know more about agent 12345. Since I have a conversation open with them, I can send a message to them.
   action_intention: |-
     Greet agent 12345
 system: AGENTS
   function: message_agent
   arguments:
-    id: 12345
     message: |-
       Hello!
 </system-function-calls>
@@ -775,21 +774,12 @@ async def run_mind() -> None:
         focused_goal_id=goals.focused,
     )
     call_event_batch = feed.call_event_batch()
-    # if completed_actions:
-    # last_function_batch = call_event_batch[0]
-    # assert isinstance(last_function_batch, FunctionCallEvent)
     last_function_batch = [
         event for event in call_event_batch if isinstance(event, FunctionCallEvent)
     ]
     events_since_call = [
         event for event in call_event_batch if not isinstance(event, FunctionCallEvent)
     ]
-    # else:
-    #     last_function_batch = None
-    #     events_since_call = []
-    # last_function_call = call_event_batch[0]
-    # assert isinstance(last_function_call, FunctionCallEvent)
-    # events_since_call = call_event_batch[1:] if completed_actions else []
     try:
         feed_review, system_function_calls = extract_output(
             run_state.output, completed_actions, len(events_since_call)  # type: ignore

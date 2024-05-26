@@ -22,6 +22,8 @@ GOALS_DIRECTORY = Path("data/goals")
 GOALS_DIRECTORY.mkdir(parents=True, exist_ok=True)
 AGENTS_DIRECTORY = Path("data/agents")
 AGENTS_DIRECTORY.mkdir(parents=True, exist_ok=True)
+NOTES_DIRECTORY = Path("data/notes")
+NOTES_DIRECTORY.mkdir(parents=True, exist_ok=True)
 
 NAME = CONFIG_DATA["name"]
 ID = CONFIG_DATA["id"]
@@ -36,7 +38,7 @@ MAX_RECENT_FEED_TOKENS = CONFIG_DATA["feed"]["max_recent_tokens"]
 OPENED_AGENT_CONVERSATION = GLOBAL_STATE.get("opened_agent_conversation")
 
 
-def set_global_state(key: str, value: str) -> None:
+def set_global_state(key: str, value: Any) -> None:
     """Set a global state."""
     GLOBAL_STATE[key] = value
     GLOBAL_STATE_FILE.write_text(as_yaml_str(GLOBAL_STATE), encoding="utf-8")
@@ -49,4 +51,9 @@ def action_batch_number() -> int:
 
 def opened_agent_conversation() -> str | None:
     """Get the current opened agent conversation."""
-    return GLOBAL_STATE["opened_agent_conversation"]
+    return GLOBAL_STATE.get("opened_agent_conversation")
+
+
+def loaded_notes() -> list[str]:
+    """Get the current loaded notes."""
+    return GLOBAL_STATE.get("loaded_notes", [])

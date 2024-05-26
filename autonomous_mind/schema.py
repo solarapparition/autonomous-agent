@@ -319,7 +319,6 @@ class Note:
         """Get the string representation of the memory node."""
         template = """
         id: {id}
-        type: note
         batch_number: {batch_number}
         goal_id: {goal_id}
         timestamp: {timestamp}
@@ -347,7 +346,6 @@ class Note:
         """Printout of memory node."""
         template = """
         id: {id}
-        type: note
         batch_number: {batch_number}
         goal_id: {goal_id}
         timestamp: {timestamp}
@@ -370,4 +368,4 @@ class Note:
         )
 
 
-Item = Goal | Event
+Item = Goal | Event | Note
