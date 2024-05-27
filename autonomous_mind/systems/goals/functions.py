@@ -7,7 +7,7 @@ from autonomous_mind.helpers import get_timestamp
 from autonomous_mind.id_generation import generate_id
 from autonomous_mind.schema import Goal
 from autonomous_mind.systems.config.global_state import set_global_state
-from autonomous_mind.systems.goals.helpers import save_goals
+from autonomous_mind.systems.goals.helpers import find_goal, save_goals
 from autonomous_mind.text import dedent_and_strip
 
 
@@ -37,3 +37,14 @@ def add_goal(summary: str, details: str | None, parent_goal_id: str | None = Non
     - Switched focus to GOAL {goal.id} from {parent_goal_id}
     """
     return dedent_and_strip(confirmation)
+
+
+async def edit_goal(goal_id: int, new_summary: str | None, new_details: str | None, new_parent_goal_id: int | None):
+    """Edit a goal with the given `goal_id`. Any parameter set to None will not be changed."""
+
+    goal = find_goal(goal_id)
+    goal.summary = new_summary or goal.summary
+    goal.details = new_details or goal.details
+    goal.parent_goal_id = new_parent_goal_id or goal.parent_goal_id
+    save_goals([goal])
+    return f"GOAL_SYSTEM: Goal {goal.id} updated."

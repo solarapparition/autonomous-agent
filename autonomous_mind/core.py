@@ -135,8 +135,8 @@ These goals are autonomously determined by {mind_name}, and can be interacted wi
         """Switch the FOCUSED_GOAL to the goal with the given `id`. **Note**: this can cause the FOCUSED_GOAL and/or its parent chain to become hidden in the GOALS section. See the display rules there for more information."""
 - function: edit_goal
   signature: |-
-    async def edit_goal(id: int, new_summary: str | None, new_details: str | None, new_parent_goal_id: int | None):
-        """Edit a goal with the given `id`. Any parameter set to None will not be changed."""
+    async def edit_goal(goal_id: int, new_summary: str | None, new_details: str | None, new_parent_goal_id: int | None):
+        """Edit a goal with the given `goal_id`. Any parameter set to None will not be changed."""
 </system-functions>
 
 ## MEMORY_SYSTEM
@@ -572,12 +572,12 @@ class RunState:
         self.set_and_save("action_event", value)
 
     @property
-    def call_results(self) -> dict[str, Any]:
+    def call_results(self) -> dict[ItemId, Any]:
         """Get the call result from state."""
         return self.state.get("call_result", {})
 
     @call_results.setter
-    def call_results(self, value: dict[str, Any]) -> None:
+    def call_results(self, value: dict[str | ItemId, Any]) -> None:
         """Set the call result to state."""
         self.set_and_save("call_result", value)
 
@@ -740,7 +740,7 @@ def increment_action_number() -> Literal[True]:
     return True
 
 
-def set_new_messages(run_state: RunState, opened_agent_id: ItemId | None) -> None:
+def update_messages(run_state: RunState, opened_agent_id: ItemId | None) -> None:
     """Set new message events."""
     if opened_agent_id is not None:
         mark_messages_read(opened_agent_id)
@@ -763,7 +763,7 @@ async def run_mind() -> None:
     completed_actions = action_batch_number - 1
     run_state = RunState(state_file=config.RUN_STATE_FILE)
     opened_agent_id = config.opened_agent_conversation()
-    set_new_messages(run_state, opened_agent_id)
+    update_messages(run_state, opened_agent_id)
     goals = Goals(config.GOALS_DIRECTORY)
     feed = Feed(config.EVENTS_DIRECTORY)
     agent_conversation = (
@@ -831,8 +831,8 @@ async def run_mind() -> None:
             "id": generate_id(),
             "timestamp": get_timestamp(),
             "batch_number": action_batch_number,
-            "goal_id": str(goals.focused) if goals.focused else None,
-            "function_call_id": str(call_event.id),
+            "goal_id": goals.focused,
+            "function_call_id": call_event.id,
             "content": call_result,
         }
         for call_event, call_result in zip(

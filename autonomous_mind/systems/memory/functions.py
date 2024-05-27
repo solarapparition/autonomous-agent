@@ -20,7 +20,7 @@ def create_note(content: str, context: str, summary: str, goal_id: int | None = 
         content=content,
         context=context,
         summary=summary,
-        goal_id=ItemId(goal_id) if goal_id else None,
+        goal_id=goal_id,
         batch_number=config.action_batch_number(),
     )
     save_notes([note])
