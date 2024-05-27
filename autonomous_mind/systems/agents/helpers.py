@@ -6,7 +6,7 @@ from typing import Mapping
 
 from autonomous_mind import config
 from autonomous_mind.config import AGENTS_DIRECTORY
-from autonomous_mind.helpers import get_timestamp, load_yaml
+from autonomous_mind.helpers import get_timestamp, load_yaml, save_yaml
 from autonomous_mind.id_generation import generate_id
 from autonomous_mind.schema import ItemId, NotificationEvent
 
@@ -121,3 +121,12 @@ def read_agent_conversation(agent_id: ItemId) -> str:
             + "\n\n (Page 1 of 1)"
         )
     raise NotImplementedError("TODO: Implement handling for more than 5 messages.")
+
+
+def mark_messages_read(agent_id: ItemId) -> None:
+    """Mark messages as read."""
+    record_file = get_record_file(agent_id)
+    messages = load_yaml(record_file)
+    for message in messages:
+        message["new"] = False
+    save_yaml(messages, record_file)

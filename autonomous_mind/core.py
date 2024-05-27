@@ -26,6 +26,7 @@ from autonomous_mind.schema import (
 )
 from autonomous_mind.systems.agents.helpers import (
     download_new_messages,
+    mark_messages_read,
     new_messages_notification,
 )
 from autonomous_mind.systems.feed.events import Feed, read_event, save_events
@@ -739,8 +740,10 @@ def increment_action_number() -> Literal[True]:
     return True
 
 
-def set_new_messages(run_state: RunState) -> None:
+def set_new_messages(run_state: RunState, opened_agent_id: ItemId | None) -> None:
     """Set new message events."""
+    if opened_agent_id is not None:
+        mark_messages_read(opened_agent_id)
     run_state.new_message_counts = (
         run_state.new_message_counts or download_new_messages()
     )
@@ -759,10 +762,10 @@ async def run_mind() -> None:
     action_batch_number = config.action_batch_number()
     completed_actions = action_batch_number - 1
     run_state = RunState(state_file=config.RUN_STATE_FILE)
-    set_new_messages(run_state)
+    opened_agent_id = config.opened_agent_conversation()
+    set_new_messages(run_state, opened_agent_id)
     goals = Goals(config.GOALS_DIRECTORY)
     feed = Feed(config.EVENTS_DIRECTORY)
-    opened_agent_id = config.opened_agent_conversation()
     agent_conversation = (
         read_agent_conversation(opened_agent_id)
         if opened_agent_id is not None
