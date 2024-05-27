@@ -31,7 +31,8 @@ LLM_BACKEND = CONFIG_DATA["llm_backend"]
 CORE_MODEL = ChatAnthropic(  # type: ignore
     temperature=0.8, model=LLM_BACKEND, verbose=False, max_tokens_to_sample=4096  # type: ignore
 )
-DEVELOPER = CONFIG_DATA["developer"]
+DEVELOPER_ID = CONFIG_DATA["developer_id"]
+DEVELOPER_NAME = CONFIG_DATA["developer_name"]
 SELF_DESCRIPTION = as_yaml_str(CONFIG_DATA["self_description"])
 COMPUTE_RATE = str(CONFIG_DATA["compute_rate"]).format(agent_name=NAME)
 MAX_RECENT_FEED_TOKENS = CONFIG_DATA["feed"]["max_recent_tokens"]

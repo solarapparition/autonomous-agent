@@ -23,10 +23,9 @@ class Goals:
         return sorted(list(self.goals_directory.iterdir()))
 
     @property
-    def focused(self) -> ItemId | None:
+    def focused(self) -> int | None:
         """Get the focused goal."""
-        focused_id = config.GLOBAL_STATE.get("focused_goal_id")
-        return ItemId(focused_id) if focused_id else None
+        return config.GLOBAL_STATE.get("focused_goal_id")
 
     @property
     def focused_parent(self) -> ItemId | None:

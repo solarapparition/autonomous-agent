@@ -5,7 +5,7 @@
 from autonomous_mind import config
 from autonomous_mind.helpers import get_timestamp
 from autonomous_mind.id_generation import generate_id
-from autonomous_mind.schema import Goal, ItemId
+from autonomous_mind.schema import Goal
 from autonomous_mind.systems.config.global_state import set_global_state
 from autonomous_mind.systems.goals.helpers import save_goals
 from autonomous_mind.text import dedent_and_strip
@@ -25,7 +25,7 @@ def add_goal(summary: str, details: str | None, parent_goal_id: str | None = Non
         timestamp=get_timestamp(),
         summary=summary,
         details=details,
-        parent_goal_id=ItemId(parent_goal_id) if parent_goal_id else None,
+        parent_goal_id=parent_goal_id,
     )
     save_goals([goal])
     set_global_state("focused_goal_id", str(goal.id))

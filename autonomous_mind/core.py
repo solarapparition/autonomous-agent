@@ -223,7 +223,7 @@ This is a list of pinned AGENTS that {mind_name} can communicate with.
 - id: {mind_id}
   name: {mind_name}
   description: this is me. I can send a message to myself to retain individual thoughts (like in the movie Memento), which would normally be lost after making a function call. This will show up in the FEED as a message from myself.
-- id: 25b9a536-54d0-4162-bae9-ec81dba993e9
+- id: {developer_id}
   name: {developer_name}
   description: my creator and DEVELOPER, responsible for coding and maintaining me. They can provide me with new functionality if requested, and more generally can help me with tasks that I can't do yet.
 </pinned-agents-list>
@@ -472,7 +472,8 @@ async def generate_mind_output(
         current_time=current_time,
         action_batch_number=action_batch_number,
         self_description=config.SELF_DESCRIPTION,
-        developer_name=config.DEVELOPER,
+        developer_id=config.DEVELOPER_ID,
+        developer_name=config.DEVELOPER_NAME,
         goals=goals,
         feed=feed,
         max_feed_tokens=config.MAX_RECENT_FEED_TOKENS,
@@ -763,7 +764,7 @@ async def run_mind() -> None:
     feed = Feed(config.EVENTS_DIRECTORY)
     opened_agent_id = config.opened_agent_conversation()
     agent_conversation = (
-        read_agent_conversation(ItemId(opened_agent_id))
+        read_agent_conversation(opened_agent_id)
         if opened_agent_id is not None
         else None
     )

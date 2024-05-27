@@ -8,7 +8,13 @@ from typing import Literal, Sequence
 from autonomous_mind import config
 from autonomous_mind.helpers import count_tokens, load_yaml
 from autonomous_mind.printout import full_itemized_repr, short_itemized_repr
-from autonomous_mind.schema import CallResultEvent, Event, FunctionCallEvent, ItemId, NotificationEvent
+from autonomous_mind.schema import (
+    CallResultEvent,
+    Event,
+    ItemId,
+    FunctionCallEvent,
+    NotificationEvent,
+)
 from autonomous_mind.systems.helpers import save_items
 
 
@@ -60,7 +66,9 @@ class Feed:
         """Get all recent events."""
         return self.call_event_batch(3)
 
-    def format(self, focused_goal: ItemId | None, parent_goal_id: ItemId | None) -> str | None:
+    def format(
+        self, focused_goal: ItemId | None, parent_goal_id: ItemId | None
+    ) -> str | None:
         """Get a printable representation of the feed."""
         # max_semi_recent_tokens = 1000
         recent_events_text = ""

@@ -26,17 +26,17 @@ def post_message(record_file: Path, message: str, sender: str, unread: bool) -> 
             f.write("  new: true\n")
 
 
-def get_record_file(agent_id: int) -> Path:
+def get_record_file(agent_id: ItemId) -> Path:
     """Get the record file for an agent."""
     return Path(f"{AGENTS_DIRECTORY}/{agent_id}/messages.yaml")
 
 
-def record_message_from_self(agent_id: int, message: str) -> None:
+def record_message_from_self(agent_id: ItemId, message: str) -> None:
     """Record a message in the message log for the agent."""
     post_message(get_record_file(agent_id), message, config.NAME, unread=False)
 
 
-def load_agent_module(agent_id: int) -> ModuleType:
+def load_agent_module(agent_id: ItemId) -> ModuleType:
     """Load the agent module from the given path."""
     agent_package_path = Path(f"{AGENTS_DIRECTORY}/{agent_id}/__init__.py")
     spec = importlib.util.spec_from_file_location(str(agent_id), agent_package_path)
@@ -67,7 +67,7 @@ def count_new_messages(agent_id: ItemId) -> int:
 def download_new_messages() -> dict[ItemId, int]:
     """Download messages from all agents."""
     agent_ids = [
-        ItemId(str(agent_dir.name))
+        str(agent_dir.name)
         for agent_dir in AGENTS_DIRECTORY.iterdir()
         if agent_dir.is_dir()
     ]
@@ -81,8 +81,8 @@ def download_new_messages() -> dict[ItemId, int]:
 
 def sender_name(sender_id: ItemId) -> str:
     """Get the name of the sender."""
-    if sender_id == ItemId("25b9a536-54d0-4162-bae9-ec81dba993e9"):  # developer
-        return config.DEVELOPER
+    if sender_id == config.DEVELOPER_ID:
+        return config.DEVELOPER_NAME
 
     raise NotImplementedError(
         "TODO: Implement sender_name (i.e. contact list) for other agents."
@@ -104,6 +104,7 @@ def new_messages_notification(
         content=f"New message(s) from: {sender_names}. Open the conversation with the agent to view.",
         batch_number=config.action_batch_number() - 1,
     )
+
 
 def read_agent_conversation(agent_id: ItemId) -> str:
     """Read the conversation with an agent."""

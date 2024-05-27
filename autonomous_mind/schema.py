@@ -2,7 +2,7 @@
 
 from dataclasses import dataclass, field
 from textwrap import indent
-from typing import Any, Literal, Mapping, MutableMapping, NewType, Self
+from typing import Any, Literal, Mapping, MutableMapping, Self
 
 from autonomous_mind.helpers import (
     Timestamp,
@@ -12,7 +12,7 @@ from autonomous_mind.helpers import (
 )
 from autonomous_mind.text import dedent_and_strip
 
-ItemId = NewType("ItemId", int)
+ItemId = int | str
 
 
 @dataclass
@@ -32,8 +32,7 @@ class FunctionCallEvent:
     @classmethod
     def from_mapping(cls, mapping: MutableMapping[str, Any]) -> Self:
         """Create event from a mapping."""
-        mapping["id"] = ItemId(mapping["id"])
-        mapping["goal_id"] = ItemId(mapping["goal_id"]) if mapping["goal_id"] else None
+        mapping["goal_id"] = mapping["goal_id"] or None
         mapping["timestamp"] = format_timestamp(mapping["timestamp"])
         return cls(**mapping)
 
@@ -107,10 +106,8 @@ class CallResultEvent:
     def from_mapping(cls, mapping: Mapping[str, Any]) -> Self:
         """Create an event from a mapping."""
         mapping = dict(mapping)
-        mapping["id"] = ItemId(mapping["id"])
-        mapping["goal_id"] = ItemId(mapping["goal_id"]) if mapping["goal_id"] else None
+        mapping["goal_id"] = mapping["goal_id"] or None
         mapping["timestamp"] = format_timestamp(mapping["timestamp"])
-        mapping["function_call_id"] = ItemId(mapping["function_call_id"])
         return cls(**mapping)
 
     def __repr__(self) -> str:
@@ -184,7 +181,6 @@ class NotificationEvent:
     def from_mapping(cls, mapping: Mapping[str, Any]) -> Self:
         """Create an event from a mapping."""
         mapping = dict(mapping)
-        mapping["id"] = ItemId(mapping["id"])
         mapping["timestamp"] = format_timestamp(mapping["timestamp"])
         return cls(**mapping)
 
@@ -233,11 +229,8 @@ class Goal:
     def from_mapping(cls, mapping: Mapping[str, Any]) -> Self:
         """Create a goal from a mapping."""
         mapping = dict(mapping)
-        mapping["id"] = ItemId(mapping["id"])
         mapping["timestamp"] = format_timestamp(mapping["timestamp"])
-        mapping["parent_goal_id"] = (
-            ItemId(mapping["parent_goal_id"]) if mapping.get("parent_goal_id") else None
-        )
+        mapping["parent_goal_id"] = mapping["parent_goal_id"] or None
         return cls(**mapping)
 
     def __repr__(self) -> str:
@@ -305,7 +298,6 @@ class Note:
     def from_mapping(cls, mapping: Mapping[str, Any]) -> Self:
         """Create a memory node from a mapping."""
         mapping = dict(mapping)
-        mapping["id"] = ItemId(mapping["id"])
         mapping["timestamp"] = format_timestamp(mapping["timestamp"])
         return cls(**mapping)
 
