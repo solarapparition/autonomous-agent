@@ -15,7 +15,7 @@ from colorama import Fore
 from langchain_core.messages import HumanMessage, SystemMessage
 import toml
 
-from autonomous_mind import config
+from autonomous_mind.systems.config import settings
 from autonomous_mind.id_generation import generate_id
 from autonomous_mind.models import format_messages, query_model
 from autonomous_mind.schema import (
@@ -460,24 +460,24 @@ async def generate_mind_output(
     python_version = get_python_version()
     machine_info = indent(as_yaml_str(get_machine_info()), "  ")
     context = dedent_and_strip(CONTEXT).format(
-        mind_name=config.NAME,
-        source_code_location=config.SOURCE_DIRECTORY.absolute(),
+        mind_name=settings.NAME,
+        source_code_location=settings.SOURCE_DIRECTORY.absolute(),
         python_version=python_version,
-        build_config_file=config.BUILD_CONFIG_FILE,
-        config_file_location=config.CONFIG_FILE,
+        build_config_file=settings.BUILD_CONFIG_FILE,
+        config_file_location=settings.CONFIG_FILE,
         machine_info=machine_info,
-        mind_id=config.ID,
-        llm_backend=config.LLM_BACKEND,
+        mind_id=settings.ID,
+        llm_backend=settings.LLM_BACKEND,
         llm_knowledge_cutoff=LLM_KNOWLEDGE_CUTOFF,
-        compute_rate=config.COMPUTE_RATE,
+        compute_rate=settings.COMPUTE_RATE,
         current_time=current_time,
         action_batch_number=action_batch_number,
-        self_description=config.SELF_DESCRIPTION,
-        developer_id=config.DEVELOPER_ID,
-        developer_name=config.DEVELOPER_NAME,
+        self_description=settings.SELF_DESCRIPTION,
+        developer_id=settings.DEVELOPER_ID,
+        developer_name=settings.DEVELOPER_NAME,
         goals=goals,
         feed=feed,
-        max_feed_tokens=config.MAX_RECENT_FEED_TOKENS,
+        max_feed_tokens=settings.MAX_RECENT_FEED_TOKENS,
         max_memory_tokens=MAX_MEMORY_TOKENS,
         opened_agent_id=opened_agent_id,
         opened_agent_conversation=opened_agent_conversation,
@@ -735,8 +735,8 @@ def update_new_events(
 
 def increment_action_number() -> Literal[True]:
     """Increment the action number."""
-    config.GLOBAL_STATE["action_batch_number"] += 1
-    save_yaml(config.GLOBAL_STATE, config.GLOBAL_STATE_FILE)
+    settings.GLOBAL_STATE["action_batch_number"] += 1
+    save_yaml(settings.GLOBAL_STATE, settings.GLOBAL_STATE_FILE)
     return True
 
 
@@ -759,13 +759,13 @@ async def run_mind() -> None:
     Run the AMM for one action batch.
     We do NOT loop this; the AMM has an action rate that determines how often it can act, which is controlled separately via a scheduler.
     """
-    action_batch_number = config.action_batch_number()
+    action_batch_number = settings.action_batch_number()
     completed_actions = action_batch_number - 1
-    run_state = RunState(state_file=config.RUN_STATE_FILE)
-    opened_agent_id = config.opened_agent_conversation()
+    run_state = RunState(state_file=settings.RUN_STATE_FILE)
+    opened_agent_id = settings.opened_agent_conversation()
     update_messages(run_state, opened_agent_id)
-    goals = Goals(config.GOALS_DIRECTORY)
-    feed = Feed(config.EVENTS_DIRECTORY)
+    goals = Goals(settings.GOALS_DIRECTORY)
+    feed = Feed(settings.EVENTS_DIRECTORY)
     agent_conversation = (
         read_agent_conversation(opened_agent_id)
         if opened_agent_id is not None

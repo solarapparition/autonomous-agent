@@ -7,7 +7,7 @@ from colorama import Fore
 from langchain_core.language_models import BaseChatModel
 from langchain_core.messages import BaseMessage  # , AIMessage, ToolCall
 
-from autonomous_mind.config import CORE_MODEL
+from autonomous_mind.systems.config.settings import CORE_MODEL
 
 # from langchain_core.tools import tool
 

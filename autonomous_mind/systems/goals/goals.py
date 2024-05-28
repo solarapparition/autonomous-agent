@@ -4,7 +4,7 @@ from dataclasses import dataclass
 from functools import cached_property
 from pathlib import Path
 
-from autonomous_mind import config
+from autonomous_mind.systems.config import settings
 from autonomous_mind.helpers import as_yaml_str
 from autonomous_mind.printout import full_itemized_repr, short_itemized_repr
 from autonomous_mind.schema import ItemId
@@ -25,7 +25,7 @@ class Goals:
     @property
     def focused(self) -> int | None:
         """Get the focused goal."""
-        return config.GLOBAL_STATE.get("focused_goal_id")
+        return settings.GLOBAL_STATE.get("focused_goal_id")
 
     @property
     def focused_parent(self) -> ItemId | None:

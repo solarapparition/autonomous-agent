@@ -2,7 +2,7 @@
 
 # pylint: disable=line-too-long
 
-from autonomous_mind import config
+from autonomous_mind.systems.config import settings
 from autonomous_mind.helpers import get_timestamp
 from autonomous_mind.id_generation import generate_id
 from autonomous_mind.schema import Goal
@@ -21,7 +21,7 @@ def add_goal(summary: str, details: str | None, parent_goal_id: str | None = Non
     """
     goal = Goal(
         id=generate_id(),
-        batch_number=config.action_batch_number(),
+        batch_number=settings.action_batch_number(),
         timestamp=get_timestamp(),
         summary=summary,
         details=details,

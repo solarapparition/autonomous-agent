@@ -5,7 +5,7 @@ from functools import cached_property, lru_cache
 from pathlib import Path
 from typing import Literal, Sequence
 
-from autonomous_mind import config
+from autonomous_mind.systems.config import settings
 from autonomous_mind.helpers import count_tokens, load_yaml
 from autonomous_mind.printout import full_itemized_repr, short_itemized_repr
 from autonomous_mind.schema import (
@@ -20,7 +20,7 @@ from autonomous_mind.systems.helpers import save_items
 
 def save_events(events: Sequence[Event]) -> Literal[True]:
     """Save the events to disk."""
-    return save_items(events, config.EVENTS_DIRECTORY)
+    return save_items(events, settings.EVENTS_DIRECTORY)
 
 
 @lru_cache(maxsize=None)
@@ -52,7 +52,7 @@ class Feed:
         # action_count = 0
         for event_file in reversed(self.event_files):
             event = read_event(event_file)
-            if config.action_batch_number() - event.batch_number > action_batch_limit:
+            if settings.action_batch_number() - event.batch_number > action_batch_limit:
                 break
             events.insert(0, event)
             # if isinstance(event, FunctionCallEvent):
@@ -76,7 +76,7 @@ class Feed:
         for file in reversed(self.event_files):
             event = read_event(file)
             # we represent the event differently depending on various conditions
-            batch_recency = config.action_batch_number() - event.batch_number
+            batch_recency = settings.action_batch_number() - event.batch_number
             goal_unrelated = (
                 event.goal_id != focused_goal
                 or (parent_goal_id and event.goal_id != parent_goal_id)
@@ -102,7 +102,7 @@ class Feed:
             )
             if (
                 count_tokens(proposed_recent_events_text)
-                > config.MAX_RECENT_FEED_TOKENS
+                > settings.MAX_RECENT_FEED_TOKENS
             ):
                 raise NotImplementedError("TODO: Rewind back to `recent_events_text`.")
             recent_events_text = proposed_recent_events_text

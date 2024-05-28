@@ -4,8 +4,8 @@ from textwrap import indent
 from types import ModuleType
 from typing import Mapping
 
-from autonomous_mind import config
-from autonomous_mind.config import AGENTS_DIRECTORY
+from autonomous_mind.systems.config import settings
+from autonomous_mind.systems.config.settings import AGENTS_DIRECTORY
 from autonomous_mind.helpers import get_timestamp, load_yaml, save_yaml
 from autonomous_mind.id_generation import generate_id
 from autonomous_mind.schema import ItemId, NotificationEvent
@@ -33,7 +33,7 @@ def get_record_file(agent_id: ItemId) -> Path:
 
 def record_message_from_self(agent_id: ItemId, message: str) -> None:
     """Record a message in the message log for the agent."""
-    post_message(get_record_file(agent_id), message, config.NAME, unread=False)
+    post_message(get_record_file(agent_id), message, settings.NAME, unread=False)
 
 
 def load_agent_module(agent_id: ItemId) -> ModuleType:
@@ -57,7 +57,7 @@ def count_new_messages(agent_id: ItemId) -> int:
         sum(
             bool(record)
             for record in records
-            if record["sender"] != config.NAME and record.get("new")
+            if record["sender"] != settings.NAME and record.get("new")
         )
         if records
         else 0
@@ -81,8 +81,8 @@ def download_new_messages() -> dict[ItemId, int]:
 
 def sender_name(sender_id: ItemId) -> str:
     """Get the name of the sender."""
-    if sender_id == config.DEVELOPER_ID:
-        return config.DEVELOPER_NAME
+    if sender_id == settings.DEVELOPER_ID:
+        return settings.DEVELOPER_NAME
 
     raise NotImplementedError(
         "TODO: Implement sender_name (i.e. contact list) for other agents."
@@ -102,7 +102,7 @@ def new_messages_notification(
     return NotificationEvent(
         id=generate_id(),
         content=f"New message(s) from: {sender_names}. Open the conversation with the agent to view.",
-        batch_number=config.action_batch_number() - 1,
+        batch_number=settings.action_batch_number() - 1,
     )
 
 

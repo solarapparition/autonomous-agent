@@ -1,7 +1,7 @@
 """Memory system functions."""
 
 from typing import Literal
-from autonomous_mind import config
+from autonomous_mind.systems.config import settings
 from autonomous_mind.id_generation import generate_id
 from autonomous_mind.schema import ItemId, Note
 from autonomous_mind.systems.memory.helpers import load_note_to_memory, save_notes
@@ -21,7 +21,7 @@ def create_note(content: str, context: str, summary: str, goal_id: int | None = 
         context=context,
         summary=summary,
         goal_id=goal_id,
-        batch_number=config.action_batch_number(),
+        batch_number=settings.action_batch_number(),
     )
     save_notes([note])
     confirmation = f"MEMORY_SYSTEM: Note {note.id} created."

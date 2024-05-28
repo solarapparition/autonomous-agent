@@ -3,7 +3,7 @@
 from functools import lru_cache
 from pathlib import Path
 from typing import Literal, Sequence
-from autonomous_mind import config
+from autonomous_mind.systems.config import settings
 from autonomous_mind.helpers import load_yaml
 from autonomous_mind.schema import Goal, ItemId
 from autonomous_mind.systems.helpers import save_items
@@ -11,7 +11,7 @@ from autonomous_mind.systems.helpers import save_items
 
 def save_goals(goals: Sequence[Goal]) -> Literal[True]:
     """Save a goal object to the goals file."""
-    return save_items(goals, config.GOALS_DIRECTORY)
+    return save_items(goals, settings.GOALS_DIRECTORY)
 
 
 @lru_cache(maxsize=None)
@@ -24,7 +24,7 @@ def find_goal(goal_id: ItemId) -> Goal:
     """Get the filename for a goal."""
     return next(
         goal
-        for goal_file in reversed(list(config.GOALS_DIRECTORY.iterdir()))
+        for goal_file in reversed(list(settings.GOALS_DIRECTORY.iterdir()))
         if (goal := read_goal(goal_file)).id == goal_id
     )
 
