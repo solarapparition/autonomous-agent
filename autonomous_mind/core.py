@@ -116,7 +116,7 @@ This section contains {mind_name}'s current goals, listed in an order resembling
 These goals are autonomously determined by {mind_name}, and can be interacted with through the GOALS_SYSTEM_FUNCTIONS.
 
 ### GOALS_SYSTEM_FUNCTIONS
-<system-functions system="GOAL">
+<system-functions system="GOALS">
 - function: add_goal
   signature: |-
     async def add_goal(summary: str, details: str, parent_goal_id: int | None = None, switch_focus: bool = True):
@@ -206,7 +206,10 @@ FEED items are automatically populated by the FEED_SYSTEM, and can be interacted
         `time` is either a UTC timestamp or a duration from the current time.
         If `repeat` is True, the reminder will repeat at the specified interval, OR daily at the timestamp if `mode="until"`.
         """
-</system-functions>
+- function: load_feed_item_into_memory
+  signature: |-
+    async def load_feed_item_into_memory(feed_item_id: int):
+        """Load a feed item into the MEMORY section for medium-term reference."""
 
 ## AGENTS_SYSTEM
 Handles communication with AGENTS—entities capable of acting on their own.
