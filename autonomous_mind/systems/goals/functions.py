@@ -2,11 +2,10 @@
 
 # pylint: disable=line-too-long
 
-from autonomous_mind.systems.config import settings
+from autonomous_mind.systems.config.global_state import global_state
 from autonomous_mind.helpers import get_timestamp
 from autonomous_mind.id_generation import generate_id
 from autonomous_mind.schema import Goal
-from autonomous_mind.systems.config.global_state import set_global_state
 from autonomous_mind.systems.goals.helpers import find_goal, save_goals
 from autonomous_mind.text import dedent_and_strip
 
@@ -21,14 +20,14 @@ def add_goal(summary: str, details: str | None, parent_goal_id: str | None = Non
     """
     goal = Goal(
         id=generate_id(),
-        batch_number=settings.action_batch_number(),
+        batch_number=global_state.action_batch_number,
         timestamp=get_timestamp(),
         summary=summary,
         details=details,
         parent_goal_id=parent_goal_id,
     )
     save_goals([goal])
-    set_global_state("focused_goal_id", str(goal.id))
+    global_state.focused_goal_id = goal.id
     confirmation = f"""
     GOAL_SYSTEM:
     - GOAL added:

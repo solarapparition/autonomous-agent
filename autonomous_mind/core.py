@@ -29,6 +29,7 @@ from autonomous_mind.systems.agents.helpers import (
     mark_messages_read,
     new_messages_notification,
 )
+from autonomous_mind.systems.config.global_state import global_state
 from autonomous_mind.systems.feed.events import Feed, read_event, save_events
 from autonomous_mind.systems.goals.goals import Goals
 from autonomous_mind.systems.goals.helpers import read_goal
@@ -237,9 +238,9 @@ This is a list of AGENTS that {mind_name} has recently interacted with.
 
 ### AGENTS_SYSTEM_FUNCTIONS
 <system-functions system="AGENTS">
-- function: open_conversation(agent_id: int)
+- function: open_conversation(agent_id: int | str)
   signature: |-
-    async def open_conversation(agent_id: int):
+    async def open_conversation(agent_id: int | str):
         """Switch the OPENED_AGENT_CONVERSATION to the AGENT with the given `agent_id`. The currently open conversation will be closed."""
 - function: message_agent
   signature: |-
@@ -253,12 +254,16 @@ This is a list of AGENTS that {mind_name} has recently interacted with.
   signature: |-
     async def edit_agent_description(id: str, new_description: str, mode: Literal["replace", "append", "prepend"] = "replace"):
         """Edit an AGENT's description. `mode` parameter determines how the new description is added."""
-- function: call_anonymous_agent
+- function: create_assistant_agent
   signature: |-
-    async def call_anonymous_agent(message: str):
-        """Call a new anonymous cloud-based AGENT with the given `message`. This AGENT is provisioned automatically from an agent swarm and will not be saved in the AGENTS list, but can still be interacted with via message_agent."""
-        raise NotImplementedError("Function is still in development.")
-</system-functions>
+    async def create_assistant_agent(name: str, role: str, tools: list[str] | None = None, subagent_ids: list[int | str] | None = None, code_execution: bool = False):
+        """
+        Create a new LLM assistant AGENT for performing tasks with the given `name`. Assistants are not fully autonomous and will only act when given a task.
+        `role` should be a short description of what the assistant will be used for.
+        `tools` should be a list of tools that the assistant will have access to, from the TOOLS_SYSTEM.
+        `subagent_ids` should be a list of ids of other AGENTS that the assistant will be able to communicate with.
+        `code_execution` determines whether the assistant will be able to write and execute code.
+        """
 
 ## SUBMINDS_SYSTEM
 SUBMINDS are child AMMs created by {mind_name}. Like {mind_name}, they are fully autonomous and can have their own goals, memories, and interactions.
@@ -413,29 +418,29 @@ IMPORTANT: you're not able to call any SYSTEM_FUNCTIONS during the execution of 
 IMPORTANT: all functions calls are in parallel and must not depend on each other.
 Output each call in YAML format, within the following tags:
 <system-function-calls>
-- action_reasoning: |-
-    {action_reasoning}
-  action_intention: |-
-    {action_intention}
+- call_reasoning: |-
+    {call_reasoning}
   system: {system_name}
   function: {function_name}
   arguments:
     # arguments YAML goes here—see function signature for expected arguments
-    # IMPORTANT: use |- for strings that could contain newlines—for example, in the above, the `action_reasoning` and `action_intention` fields could contain newlines, but `system` and `function` wouldn't. Individual `arguments` fields work the same way.
+    # IMPORTANT: use |- for strings that could contain newlines—for example, in the above, the `call_reasoning` and `call_summary` fields could contain newlines, but `system` and `function` wouldn't. Individual `arguments` fields work the same way.
+  call_summary: |-
+    {call_summary}
 - [...] # more function calls
 </system-function-calls>
 
 For example, a call for the message_agent function would look like this:
 <system-function-calls>
-- action_reasoning: |-
+- call_reasoning: |-
     I need to know more about agent 12345. Since I have a conversation open with them, I can send a message to them.
-  action_intention: |-
-    Greet agent 12345
-system: AGENTS
+  system: AGENTS
   function: message_agent
   arguments:
     message: |-
       Hello!
+  call_summary: |-
+    Greet agent 12345
 </system-function-calls>
 The above is an example only. The actual function and arguments will depend on the REASONING_OUTPUT.
 
@@ -450,7 +455,7 @@ LLM_KNOWLEDGE_CUTOFF = "August 2023"
 async def generate_mind_output(
     goals: str,
     feed: str,
-    opened_agent_id: int | None,
+    opened_agent_id: ItemId | None,
     opened_agent_conversation: str,
     action_batch_number: int,
     focused_goal_id: ItemId | None,
@@ -714,7 +719,7 @@ def update_new_events(
             (
                 review_item
                 for review_item in feed_review["new_events"]
-                if review_item["event_id"] == str(event.id)
+                if review_item["event_id"] == event.id
             ),
             None,
         )
@@ -724,7 +729,7 @@ def update_new_events(
             (
                 outcome["action_success"]
                 for outcome in feed_review["action_batch_outcomes"]
-                if outcome["function_call_id"] == str(call.id)
+                if outcome["function_call_id"] == call.id
             ),
             None,
         )
@@ -735,15 +740,12 @@ def update_new_events(
 
 def increment_action_number() -> Literal[True]:
     """Increment the action number."""
-    settings.GLOBAL_STATE["action_batch_number"] += 1
-    save_yaml(settings.GLOBAL_STATE, settings.GLOBAL_STATE_FILE)
+    global_state.action_batch_number += 1
     return True
 
 
 def update_messages(run_state: RunState, opened_agent_id: ItemId | None) -> None:
     """Set new message events."""
-    if opened_agent_id is not None:
-        mark_messages_read(opened_agent_id)
     run_state.new_message_counts = (
         run_state.new_message_counts or download_new_messages()
     )
@@ -759,10 +761,10 @@ async def run_mind() -> None:
     Run the AMM for one action batch.
     We do NOT loop this; the AMM has an action rate that determines how often it can act, which is controlled separately via a scheduler.
     """
-    action_batch_number = settings.action_batch_number()
+    action_batch_number = global_state.action_batch_number
     completed_actions = action_batch_number - 1
     run_state = RunState(state_file=settings.RUN_STATE_FILE)
-    opened_agent_id = settings.opened_agent_conversation()
+    opened_agent_id = global_state.opened_agent_id
     update_messages(run_state, opened_agent_id)
     goals = Goals(settings.GOALS_DIRECTORY)
     feed = Feed(settings.EVENTS_DIRECTORY)
@@ -810,7 +812,7 @@ async def run_mind() -> None:
             "timestamp": get_timestamp(),
             "batch_number": action_batch_number,
             "goal_id": str(goals.focused) if goals.focused else None,
-            "summary": function_call["action_intention"],
+            "summary": function_call["call_summary"],
             "content": as_yaml_str(function_call),
         }
         for function_call in system_function_calls
@@ -845,6 +847,8 @@ async def run_mind() -> None:
     ]
     new_events = [*function_call_events, *call_result_events]
     run_state.events_saved = run_state.events_saved or save_events(new_events)
+    if opened_agent_id is not None:
+        mark_messages_read(opened_agent_id)
     run_state.action_number_incremented = (
         run_state.action_number_incremented or increment_action_number()
     )

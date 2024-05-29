@@ -4,7 +4,7 @@ from dataclasses import dataclass
 from functools import cached_property
 from pathlib import Path
 
-from autonomous_mind.systems.config import settings
+from autonomous_mind.systems.config.global_state import global_state
 from autonomous_mind.helpers import as_yaml_str
 from autonomous_mind.printout import full_itemized_repr, short_itemized_repr
 from autonomous_mind.schema import ItemId
@@ -23,9 +23,9 @@ class Goals:
         return sorted(list(self.goals_directory.iterdir()))
 
     @property
-    def focused(self) -> int | None:
+    def focused(self) -> ItemId | None:
         """Get the focused goal."""
-        return settings.GLOBAL_STATE.get("focused_goal_id")
+        return global_state.focused_goal_id
 
     @property
     def focused_parent(self) -> ItemId | None:

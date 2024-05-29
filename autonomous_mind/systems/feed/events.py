@@ -6,6 +6,7 @@ from pathlib import Path
 from typing import Literal, Sequence
 
 from autonomous_mind.systems.config import settings
+from autonomous_mind.systems.config.global_state import global_state
 from autonomous_mind.helpers import count_tokens, load_yaml
 from autonomous_mind.printout import full_itemized_repr, short_itemized_repr
 from autonomous_mind.schema import (
@@ -52,7 +53,7 @@ class Feed:
         # action_count = 0
         for event_file in reversed(self.event_files):
             event = read_event(event_file)
-            if settings.action_batch_number() - event.batch_number > action_batch_limit:
+            if global_state.action_batch_number - event.batch_number > action_batch_limit:
                 break
             events.insert(0, event)
             # if isinstance(event, FunctionCallEvent):
@@ -76,7 +77,7 @@ class Feed:
         for file in reversed(self.event_files):
             event = read_event(file)
             # we represent the event differently depending on various conditions
-            batch_recency = settings.action_batch_number() - event.batch_number
+            batch_recency = global_state.action_batch_number - event.batch_number
             goal_unrelated = (
                 event.goal_id != focused_goal
                 or (parent_goal_id and event.goal_id != parent_goal_id)

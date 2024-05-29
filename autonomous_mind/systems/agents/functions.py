@@ -1,17 +1,16 @@
 """Functions for interacting with AGENTS."""
 
-from autonomous_mind.systems.config import settings
 from autonomous_mind.systems.agents.helpers import (
     MessageSendingError,
     load_agent_module,
     record_message_from_self,
 )
-from autonomous_mind.systems.config import global_state
+from autonomous_mind.systems.config.global_state import global_state
 
 
 async def message_agent(message: str):
     """Send a message to the agent that is currently open in the OPENED_AGENT_CONVERSATION. If no conversation is open, return an error message."""
-    if not (agent_id := settings.opened_agent_conversation()):
+    if not (agent_id := global_state.opened_agent_id):
         return "AGENT_SYSTEM: No conversation with an agent is currently open. Please open a conversation with an agent before sending a message."
     agent_module = load_agent_module(agent_id)
     send_message = agent_module.send_message
@@ -28,8 +27,8 @@ def list_agents():
     raise NotImplementedError
 
 
-async def open_conversation(agent_id: str):
+async def open_conversation(agent_id: str | int):
     """Switch the OPENED_AGENT_CONVERSATION to the AGENT with the given `agent_id`. The currently open conversation will be closed."""
-    previous_agent_id = settings.opened_agent_conversation()
-    global_state.set_global_state("opened_agent_conversation", agent_id)
+    previous_agent_id = global_state.opened_agent_id
+    global_state.opened_agent_id = agent_id
     return f"AGENT_SYSTEM: Opened conversation with agent {agent_id}. Closed conversation with agent {previous_agent_id}."

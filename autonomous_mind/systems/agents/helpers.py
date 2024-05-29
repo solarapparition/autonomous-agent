@@ -5,7 +5,7 @@ from types import ModuleType
 from typing import Mapping
 
 from autonomous_mind.systems.config import settings
-from autonomous_mind.systems.config.settings import AGENTS_DIRECTORY
+from autonomous_mind.systems.config.global_state import global_state
 from autonomous_mind.helpers import get_timestamp, load_yaml, save_yaml
 from autonomous_mind.id_generation import generate_id
 from autonomous_mind.schema import ItemId, NotificationEvent
@@ -28,7 +28,7 @@ def post_message(record_file: Path, message: str, sender: str, unread: bool) -> 
 
 def get_record_file(agent_id: ItemId) -> Path:
     """Get the record file for an agent."""
-    return Path(f"{AGENTS_DIRECTORY}/{agent_id}/messages.yaml")
+    return Path(f"{settings.AGENTS_DIRECTORY}/{agent_id}/messages.yaml")
 
 
 def record_message_from_self(agent_id: ItemId, message: str) -> None:
@@ -38,7 +38,7 @@ def record_message_from_self(agent_id: ItemId, message: str) -> None:
 
 def load_agent_module(agent_id: ItemId) -> ModuleType:
     """Load the agent module from the given path."""
-    agent_package_path = Path(f"{AGENTS_DIRECTORY}/{agent_id}/__init__.py")
+    agent_package_path = Path(f"{settings.AGENTS_DIRECTORY}/{agent_id}/__init__.py")
     spec = importlib.util.spec_from_file_location(str(agent_id), agent_package_path)
     assert spec
     assert spec.loader
@@ -49,7 +49,7 @@ def load_agent_module(agent_id: ItemId) -> ModuleType:
 
 def count_new_messages(agent_id: ItemId) -> int:
     """Count the number of new messages for an agent."""
-    record_file = Path(f"{AGENTS_DIRECTORY}/{agent_id}/messages.yaml")
+    record_file = Path(f"{settings.AGENTS_DIRECTORY}/{agent_id}/messages.yaml")
     if not record_file.exists():
         return 0
     records = load_yaml(record_file)
@@ -68,7 +68,7 @@ def download_new_messages() -> dict[ItemId, int]:
     """Download messages from all agents."""
     agent_ids = [
         str(agent_dir.name)
-        for agent_dir in AGENTS_DIRECTORY.iterdir()
+        for agent_dir in settings.AGENTS_DIRECTORY.iterdir()
         if agent_dir.is_dir()
     ]
     message_counts: dict[ItemId, int] = {}
@@ -102,7 +102,7 @@ def new_messages_notification(
     return NotificationEvent(
         id=generate_id(),
         content=f"New message(s) from: {sender_names}. Open the conversation with the agent to view.",
-        batch_number=settings.action_batch_number() - 1,
+        batch_number=global_state.action_batch_number - 1,
     )
 
 
@@ -114,7 +114,7 @@ def read_agent_conversation(agent_id: ItemId) -> str:
         return (
             "\n\n".join(
                 [
-                    f"[{message['timestamp']}] {message['sender']}: {message['content']}"
+                    f"{'[NEW] ' if message['new'] else ''}[{message['timestamp']}] {message['sender']}: {message['content']}"
                     for message in messages
                 ]
             )
