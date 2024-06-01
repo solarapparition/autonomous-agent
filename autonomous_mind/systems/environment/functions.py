@@ -16,4 +16,4 @@ def send_shell_command(command: str) -> str:
     """Send a shell command to the environment."""
     shell.send_command(command)
     abbreviated_command = f"{command[:25]} [...]"
-    return f"Sent shell command:\n```\n{abbreviated_command}\n```"
+    return f"Sent shell command:\n```\n{abbreviated_command}\n```\nThe output will appear in ENVIRONMENT_VIEWPORTS if the command-line viewport is open."

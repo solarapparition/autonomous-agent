@@ -102,7 +102,7 @@ def new_messages_notification(
     )
     return NotificationEvent(
         id=generate_id(),
-        content=f"New message(s) from: {sender_names}. Open the conversation with the agent to view.",
+        content=f"New message(s) from: {sender_names}. They will appear in OPENED_AGENT_CONVERSATION if it's open for that agent.",
         batch_number=global_state.action_batch_number - 1,
     )
 

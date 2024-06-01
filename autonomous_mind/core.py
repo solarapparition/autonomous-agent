@@ -192,7 +192,6 @@ This contains external events as well as calls that {mind_name} has sent to the 
 <feed>
 {feed}
 </feed>
-FEED items are automatically populated by the FEED_SYSTEM, and can be interacted with through FUNCTIONS for that SYSTEM. 
 
 ### FEED_SYSTEM_FUNCTIONS
 <system-functions system="FEED">
@@ -818,6 +817,7 @@ async def run_mind() -> None:
         action_batch_number=action_batch_number,
         focused_goal_id=goals.focused,
     )
+    breakpoint()
     call_event_batch = feed.call_event_batch()
     last_function_batch = [
         event for event in call_event_batch if isinstance(event, FunctionCallEvent)
