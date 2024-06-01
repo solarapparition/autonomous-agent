@@ -27,7 +27,7 @@ def create_note(content: str, context: str, summary: str, goal_id: int | None = 
     confirmation = f"MEMORY_SYSTEM: Note {note.id} created."
     if load_to_memory:
         load_note_to_memory(note.id)
-        confirmation += f"MEMORY_SYSTEM: Note {note.id} loaded to active memory."
+        confirmation += f"\nMEMORY_SYSTEM: Note {note.id} loaded to active memory."
     return confirmation
 
 

@@ -1,39 +1,19 @@
 """Event classes for the feed system."""
 
 from dataclasses import dataclass
-from functools import cached_property, lru_cache
+from functools import cached_property
 from pathlib import Path
-from typing import Literal, Sequence
 
 from autonomous_mind.systems.config import settings
 from autonomous_mind.systems.config.global_state import global_state
-from autonomous_mind.helpers import count_tokens, load_yaml
+from autonomous_mind.helpers import count_tokens
 from autonomous_mind.printout import full_itemized_repr, short_itemized_repr
 from autonomous_mind.schema import (
-    CallResultEvent,
     Event,
     ItemId,
     FunctionCallEvent,
-    NotificationEvent,
 )
-from autonomous_mind.systems.helpers import save_items
-
-
-def save_events(events: Sequence[Event]) -> Literal[True]:
-    """Save the events to disk."""
-    return save_items(events, settings.EVENTS_DIRECTORY)
-
-
-@lru_cache(maxsize=None)
-def read_event(event_file: Path) -> Event:
-    """Read an event from disk."""
-    event_dict = load_yaml(event_file)
-    type_mapping = {
-        "function_call": FunctionCallEvent,
-        "call_result": CallResultEvent,
-        "notification": NotificationEvent,
-    }
-    return type_mapping[event_dict["type"]].from_mapping(event_dict)
+from autonomous_mind.systems.helpers import read_event
 
 
 @dataclass
@@ -105,6 +85,7 @@ class Feed:
                 count_tokens(proposed_recent_events_text)
                 > settings.MAX_RECENT_FEED_TOKENS
             ):
+                breakpoint()
                 raise NotImplementedError("TODO: Rewind back to `recent_events_text`.")
             recent_events_text = proposed_recent_events_text
             current_action_text = ""

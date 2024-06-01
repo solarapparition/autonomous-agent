@@ -1,8 +1,9 @@
+import math
 from pathlib import Path
 import importlib.util
 from textwrap import indent
 from types import ModuleType
-from typing import Mapping
+from typing import Literal, Mapping
 
 from autonomous_mind.systems.config import settings
 from autonomous_mind.systems.config.global_state import global_state
@@ -106,19 +107,26 @@ def new_messages_notification(
     )
 
 
-def read_agent_conversation(agent_id: ItemId) -> str:
+def format_message(message: dict[str, str]) -> str:
+    """Format a message for display."""
+    new_status = "[NEW] " if message.get("new") else ""
+    return f"{new_status}[{message['timestamp']}] {message['sender']}: {message['content']}"
+
+
+def read_agent_conversation(
+    agent_id: ItemId, page: int | Literal["earliest", "latest"] = "latest"
+) -> str:
     """Read the conversation with an agent."""
     record_file = get_record_file(agent_id)
     messages = load_yaml(record_file)
-    if len(messages) <= 5:
+    messages_per_page = 5
+    num_pages = math.ceil(len(messages) / messages_per_page)
+    if page == "latest":
         return (
             "\n\n".join(
-                [
-                    f"{'[NEW] ' if message['new'] else ''}[{message['timestamp']}] {message['sender']}: {message['content']}"
-                    for message in messages
-                ]
+                [format_message(message) for message in messages[-messages_per_page:]]
             )
-            + "\n\n (Page 1 of 1)"
+            + f"\n\n (Page {num_pages} of {num_pages})"
         )
     raise NotImplementedError("TODO: Implement handling for more than 5 messages.")
 

@@ -1,7 +1,7 @@
 """Global state management."""
 
 from dataclasses import dataclass, field
-from typing import Any, MutableMapping
+from typing import Any, MutableMapping, Sequence
 from autonomous_mind.schema import ItemId
 from autonomous_mind.systems.config.settings import GLOBAL_STATE_FILE
 from autonomous_mind.helpers import as_yaml_str, load_yaml
@@ -52,14 +52,14 @@ class GlobalState:
         self.set_value("opened_agent_conversation", value)
 
     @property
-    def loaded_notes(self) -> list[ItemId]:
-        """Get the current loaded notes."""
-        return self.mapping.get("loaded_notes", [])
+    def loaded_memories(self) -> Sequence[ItemId]:
+        """Get the current loaded memories."""
+        return self.mapping.get("loaded_memories", [])
 
-    @loaded_notes.setter
-    def loaded_notes(self, value: list[ItemId]) -> None:
-        """Set the current loaded notes."""
-        self.set_value("loaded_notes", value)
+    @loaded_memories.setter
+    def loaded_memories(self, value: list[ItemId]) -> None:
+        """Set the current loaded memories."""
+        self.set_value("loaded_memories", value)
 
     @property
     def last_id(self) -> int:

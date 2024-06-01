@@ -8,7 +8,8 @@ from autonomous_mind.systems.config.global_state import global_state
 from autonomous_mind.helpers import as_yaml_str
 from autonomous_mind.printout import full_itemized_repr, short_itemized_repr
 from autonomous_mind.schema import ItemId
-from autonomous_mind.systems.goals.helpers import find_goal, read_goal, reorder_goals
+from autonomous_mind.systems.goals.helpers import find_goal, reorder_goals
+from autonomous_mind.systems.helpers import read_goal
 
 
 @dataclass

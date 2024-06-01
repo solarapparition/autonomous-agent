@@ -22,6 +22,8 @@ AGENTS_DIRECTORY = Path("data/agents")
 AGENTS_DIRECTORY.mkdir(parents=True, exist_ok=True)
 NOTES_DIRECTORY = Path("data/notes")
 NOTES_DIRECTORY.mkdir(parents=True, exist_ok=True)
+MEMORIES_DIRECTORY = Path("data/memories")
+MEMORIES_DIRECTORY.mkdir(parents=True, exist_ok=True)
 
 NAME = CONFIG_DATA["name"]
 ID = CONFIG_DATA["id"]
@@ -34,3 +36,4 @@ DEVELOPER_NAME = CONFIG_DATA["developer_name"]
 SELF_DESCRIPTION = as_yaml_str(CONFIG_DATA["self_description"])
 COMPUTE_RATE = str(CONFIG_DATA["compute_rate"]).format(agent_name=NAME)
 MAX_RECENT_FEED_TOKENS = CONFIG_DATA["feed"]["max_recent_tokens"]
+SHELL_NAME = CONFIG_DATA["tmux_session_name"]

@@ -17,5 +17,4 @@ def save_notes(notes: Sequence[Note]) -> None:
 
 def load_note_to_memory(note_id: ItemId) -> None:
     """Load a note to memory."""
-    loaded_notes = global_state.loaded_notes
-    global_state.loaded_notes = [note_id, *loaded_notes]
+    global_state.loaded_memories = [note_id, *global_state.loaded_memories]

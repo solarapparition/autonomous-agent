@@ -30,9 +30,10 @@ from autonomous_mind.systems.agents.helpers import (
     new_messages_notification,
 )
 from autonomous_mind.systems.config.global_state import global_state
-from autonomous_mind.systems.feed.events import Feed, read_event, save_events
+from autonomous_mind.systems.feed.events import Feed
 from autonomous_mind.systems.goals.goals import Goals
-from autonomous_mind.systems.goals.helpers import read_goal
+from autonomous_mind.systems.helpers import read_event, read_goal, save_events
+from autonomous_mind.systems.memory.memory import load_active_memories
 from autonomous_mind.text import ExtractionError, dedent_and_strip, extract_and_unpack
 from autonomous_mind.helpers import (
     LONG_STR_YAML,
@@ -49,7 +50,10 @@ from autonomous_mind.systems.config import functions as config_functions
 from autonomous_mind.systems.goals import functions as goals_functions
 from autonomous_mind.systems.memory import functions as memory_functions
 from autonomous_mind.systems.agents import functions as agent_functions
-from autonomous_mind.systems.environment import functions as environment_functions
+from autonomous_mind.systems.environment import (
+    functions as environment_functions,
+    shell,
+)
 from autonomous_mind.systems.agents.helpers import read_agent_conversation
 
 AGENT_COLOR = Fore.GREEN
@@ -134,10 +138,6 @@ These goals are autonomously determined by {mind_name}, and can be interacted wi
   signature: |-
     async def switch_to_goal(id: str):
         """Switch the FOCUSED_GOAL to the goal with the given `id`. **Note**: this can cause the FOCUSED_GOAL and/or its parent chain to become hidden in the GOALS section. See the display rules there for more information."""
-- function: edit_goal
-  signature: |-
-    async def edit_goal(goal_id: int, new_summary: str | None, new_details: str | None, new_parent_goal_id: int | None):
-        """Edit a goal with the given `goal_id`. Any parameter set to None will not be changed."""
 </system-functions>
 
 ## MEMORY_SYSTEM
@@ -147,9 +147,8 @@ Allows access of memories of GOALS, EVENTS, TOOLS, and AGENTS, as well as person
 ## MEMORY_NODES
 This section contains {mind_name}'s MEMORY_NODES that have been loaded. MEMORY_NODES are chunks of information that {mind_name} has automatically or manually learned. MEMORY_NODES become unloaded automatically (from the bottom up) when they expire, or when the MEMORY section exceeds its maximum token count.
 
-Loaded MEMORY_NODES that are not pinned. These will be removed as needed when the maximum token count for the section is exceeded.
-<memory-nodes>
-None
+<memory-nodes filter="loaded">
+{memories}
 </memory-nodes>
 MEMORY_NODES are can be interacted with through FUNCTIONS for that SYSTEM.
 
@@ -218,9 +217,9 @@ Handles communication with AGENTS—entities capable of acting on their own.
 An ongoing conversation with an AGENT. {mind_name} can only have one conversation open at a time.
 
 Currently Open Agent Id: {opened_agent_id}
-<opened-agent-conversation>
+<viewport view="opened-agent-conversation">
 {opened_agent_conversation}
-</opened-agent-conversation>
+</viewport>
 
 ### PINNED_AGENTS_LIST
 This is a list of pinned AGENTS that {mind_name} can communicate with.
@@ -235,9 +234,9 @@ This is a list of pinned AGENTS that {mind_name} can communicate with.
 
 ### RECENT_AGENTS_LIST
 This is a list of AGENTS that {mind_name} has recently interacted with.
-<recent-agents-list>
+<viewport view="recent-agents-list">
 <!-- Not yet implemented -->
-</recent-agents-list>
+</viewport>
 
 ### AGENTS_SYSTEM_FUNCTIONS
 <system-functions system="AGENTS">
@@ -279,9 +278,9 @@ None - no subminds have been created.
 
 ### SUBMINDS_CHAT
 A group chat for {mind_name} and its SUBMINDS to communicate with each other.
-<subminds-chat>
+<viewport view="subminds-chat">
 None - no subminds have been created.
-</subminds-chat>
+</viewport>
 
 ### SUBMINDS_SYSTEM_FUNCTIONS
 <system-functions system="SUBMINDS">
@@ -322,9 +321,9 @@ Contains custom system functions that {mind_name} can use and create. This is th
 </pinned-tools-list>
 
 ### RECENT_TOOLS_LIST
-<recent-tools-list>
+<viewport view="recent-tools-list">
 <!-- Not yet implemented -->
-</recent-tools-list>
+</viewport>
 
 ### TOOLS_SYSTEM_FUNCTIONS
 <system-functions system="TOOL">
@@ -347,6 +346,18 @@ A meta-SYSTEM that manages the environment in which {mind_name} operates, includ
 - Machine Info:
 {machine_info}
 - CWD: {{source_code_dir}}
+
+### ENVIRONMENT_VIEWPORTS
+Viewports display information on specific environments/systems. Systems may have their own viewport(s), but the ENVIRONMENT_SYSTEM provides views into more general environments.
+<environment-viewports>
+<viewport view="command-line">
+<explanation>The command-line viewport displays the state of the command-line interface.</explanation>
+<tmux-session-id>{tmux_session_id}</tmux-session-id>
+<viewport-contents>
+{cli_viewport_contents}
+</viewport-contents>
+</viewport>
+</environment-viewports>
 
 ### ENVIRONMENT_SYSTEM_FUNCTIONS
 <system-functions system="ENVIRONMENT">
@@ -458,6 +469,7 @@ LLM_KNOWLEDGE_CUTOFF = "August 2023"
 async def generate_mind_output(
     goals: str,
     feed: str,
+    memories: str,
     opened_agent_id: ItemId | None,
     opened_agent_conversation: str,
     action_batch_number: int,
@@ -489,6 +501,9 @@ async def generate_mind_output(
         max_memory_tokens=MAX_MEMORY_TOKENS,
         opened_agent_id=opened_agent_id,
         opened_agent_conversation=opened_agent_conversation,
+        tmux_session_id=settings.SHELL_NAME,
+        cli_viewport_contents=shell.view(),
+        memories=memories,
     )
     instructions = dedent_and_strip(INSTRUCTIONS).replace(
         "{focused_goal}", str(focused_goal_id)
@@ -649,6 +664,16 @@ class RunState:
         """Set the notifications saved to state."""
         self.set_and_save("notifications_saved", value)
 
+    @property
+    def messages_updated(self) -> bool | None:
+        """Get the messages updated from state."""
+        return self.state.get("messages_updated")
+
+    @messages_updated.setter
+    def messages_updated(self, value: bool) -> None:
+        """Set the messages updated to state."""
+        self.set_and_save("messages_updated", value)
+
 
 def extract_output_sections(output: str) -> tuple[str, str]:
     """Extract required info from the output."""
@@ -747,7 +772,9 @@ def increment_action_number() -> Literal[True]:
     return True
 
 
-def update_messages(run_state: RunState, opened_agent_id: ItemId | None) -> None:
+def update_messages(
+    run_state: RunState, opened_agent_id: ItemId | None
+) -> Literal[True]:
     """Set new message events."""
     run_state.new_message_counts = (
         run_state.new_message_counts or download_new_messages()
@@ -757,6 +784,7 @@ def update_messages(run_state: RunState, opened_agent_id: ItemId | None) -> None
         run_state.notifications_saved = run_state.notifications_saved or save_events(
             [new_messages_notification_event]
         )
+    return True
 
 
 async def run_mind() -> None:
@@ -768,7 +796,9 @@ async def run_mind() -> None:
     completed_actions = action_batch_number - 1
     run_state = RunState(state_file=settings.RUN_STATE_FILE)
     opened_agent_id = global_state.opened_agent_id
-    update_messages(run_state, opened_agent_id)
+    run_state.messages_updated = run_state.messages_updated or update_messages(
+        run_state, opened_agent_id
+    )
     goals = Goals(settings.GOALS_DIRECTORY)
     feed = Feed(settings.EVENTS_DIRECTORY)
     agent_conversation = (
@@ -782,6 +812,7 @@ async def run_mind() -> None:
             focused_goal=goals.focused, parent_goal_id=goals.focused_parent
         )
         or "None",
+        memories=load_active_memories() or "None",
         opened_agent_id=opened_agent_id,
         opened_agent_conversation=agent_conversation or "None",
         action_batch_number=action_batch_number,

@@ -6,18 +6,12 @@ from typing import Literal, Sequence
 from autonomous_mind.systems.config import settings
 from autonomous_mind.helpers import load_yaml
 from autonomous_mind.schema import Goal, ItemId
-from autonomous_mind.systems.helpers import save_items
+from autonomous_mind.systems.helpers import read_goal, save_items
 
 
 def save_goals(goals: Sequence[Goal]) -> Literal[True]:
     """Save a goal object to the goals file."""
     return save_items(goals, settings.GOALS_DIRECTORY)
-
-
-@lru_cache(maxsize=None)
-def read_goal(goal_file: Path) -> Goal:
-    """Read a goal from disk."""
-    return Goal.from_mapping(load_yaml(goal_file))
 
 
 def find_goal(goal_id: ItemId) -> Goal:

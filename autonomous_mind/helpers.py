@@ -4,7 +4,7 @@ import datetime
 import os
 from pathlib import Path
 import platform
-from typing import Mapping, Any, MutableMapping, Sequence, NewType
+from typing import Mapping, Any, Sequence, NewType
 
 from ruamel.yaml import YAML
 from ruamel.yaml.compat import StringIO
@@ -36,25 +36,26 @@ def save_yaml(
     """Save YAML to a file, making sure the directory exists."""
     if not location.exists():
         os.makedirs(location.parent, exist_ok=True)
-    yaml.dump(data, location)
+    yaml.dump(data, location)  # type: ignore
 
 
 def load_yaml(location: Path, yaml: YAML = DEFAULT_YAML) -> Any:
     """Load YAML from a file."""
     with location.open("r", encoding="utf-8") as file:
-        return yaml.load(file)
+        return yaml.load(file)  # type: ignore
 
 
 def from_yaml_str(yaml_str: str, yaml: YAML = DEFAULT_YAML) -> Any:
     """Load yaml from a string."""
-    return yaml.load(yaml_str)
+    return yaml.load(yaml_str)  # type: ignore
 
 
 def as_yaml_str(
     data: Mapping[str, Any] | Sequence[Any], yaml: YAML = DEFAULT_YAML
 ) -> str:
     """Dump yaml as a string."""
-    yaml.dump(data, stream := StringIO())
+    stream = StringIO()
+    yaml.dump(data, stream)  # type: ignore
     return stream.getvalue().strip()
 
 
